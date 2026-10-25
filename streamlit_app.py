@@ -7,8 +7,9 @@ import streamlit as st
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# 1. Cloud-Optimized Write-Safe Database Configuration
-DATABASE_URL = "sqlite:////tmp/assessment_portal.db"
+# Optimized cloud-compatible dynamic directory paths
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'assessment_portal.db')}"
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -24,7 +25,6 @@ class AssessmentResult(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# 2. Production Security Identity Collections
 ADMIN_STAFF_NUMBER = "22297812"
 AUTHORIZED_STUDENTS = {
     "30996724", "53269713", "47904844", "40801942", "55952453", "53351878", 
@@ -96,21 +96,20 @@ def setup_assessment_matrix():
                 break
     return grid, word_placements
 
-# Initialize Global App Memory
 if 'authenticated' not in st.session_state:
-    st.session_state['authenticated'] = False
+    st.session_state.authenticated = False
 if 'user_id' not in st.session_state:
-    st.session_state['user_id'] = None
+    st.session_state.user_id = None
 if 'is_admin' not in st.session_state:
-    st.session_state['is_admin'] = False
+    st.session_state.is_admin = False
 if 'grid' not in st.session_state:
-    st.session_state['grid'] = None
+    st.session_state.grid = None
 if 'placements' not in st.session_state:
-    st.session_state['placements'] = {}
+    st.session_state.placements = {}
 if 'found_words' not in st.session_state:
-    st.session_state['found_words'] = set()
+    st.session_state.found_words = set()
 if 'start_time' not in st.session_state:
-    st.session_state['start_time'] = None
+    st.session_state.start_time = None
 
 def save_assessment_record(student_id, final_score, start_epoch):
     elapsed_seconds = int(time.time() - start_epoch)
@@ -129,71 +128,24 @@ def save_assessment_record(student_id, final_score, start_epoch):
         finally:
             db.close()
 
-# ----------------- MODULAR RENDERING BLOCKS -----------------
+# ----------------- APP ROUTING CONTROLLER -----------------
 
-def render_login_gate():
-    st.title("Portal Authentication Gate")
-    user_code = st.text_input("Enter Student Number / Admin Staff Number:", value="", autocomplete="off")
-    if st.button("Authenticate & Access", use_container_width=True):
-        user_code = user_code.strip()
-        if user_code == ADMIN_STAFF_NUMBER:
-            st.session_state['authenticated'] = True
-            st.session_state['user_id'] = user_code
-            st.session_state['is_admin'] = True
-            st.rerun()
-        elif user_code in AUTHORIZED_STUDENTS:
-            db = SessionLocal()
-            existing = db.query(AssessmentResult).filter(AssessmentResult.student_number == user_code).first()
-            db.close()
-            if existing:
-                st.error("Authentication failed. This student record has already logged a grading attempt.")
-            else:
-                st.session_state['authenticated'] = True
-                st.session_state['user_id'] = user_code
-                st.session_state['is_admin'] = False
-                g, p = setup_assessment_matrix()
-                st.session_state['grid'] = g
-                st.session_state['placements'] = p
-                st.session_state['found_words'] = set()
-                st.session_state['start_time'] = time.time()
-                st.rerun()
-        else:
-            st.error("The code entered is not registered on the system.")
-
-    st.markdown("---")
-    with st.expander("Admin Identity Override System"):
-        staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
-        alt_id = st.text_input("Create Alternate Student Identity String:", key="override_alt")
-        if st.button("Force Establish Session"):
-            if staff_code.strip() == ADMIN_STAFF_NUMBER and alt_id.strip():
-                st.session_state['authenticated'] = True
-                st.session_state['user_id'] = alt_id.strip()
-                st.session_state['is_admin'] = False
-                g, p = setup_assessment_matrix()
-                st.session_state['grid'] = g
-                st.session_state['placements'] = p
-                st.session_state['found_words'] = set()
-                st.session_state['start_time'] = time.time()
-                st.rerun()
-            else:
-                st.error("Invalid credentials or fields missing.")
-
-def render_admin_console():
+if st.session_state.authenticated and st.session_state.is_admin:
     st.sidebar.title("Admin Console")
     if st.sidebar.button("Sign Out"):
-        st.session_state['authenticated'] = False
-        st.session_state['is_admin'] = False
+        st.session_state.authenticated = False
+        st.session_state.is_admin = False
         st.rerun()
         
     st.title("Administrative Grade Console")
-    if st.button("Run Application Test (Practice Mode)", use_container_width=True):
-        st.session_state['user_id'] = "ADMIN-TEST"
-        st.session_state['is_admin'] = False
+    if st.button("🚀 Run Application Test (Practice Mode)"):
+        st.session_state.user_id = "ADMIN-TEST"
+        st.session_state.is_admin = False
         g, p = setup_assessment_matrix()
-        st.session_state['grid'] = g
-        st.session_state['placements'] = p
-        st.session_state['found_words'] = set()
-        st.session_state['start_time'] = time.time()
+        st.session_state.grid = g
+        st.session_state.placements = p
+        st.session_state.found_words = set()
+        st.session_state.start_time = time.time()
         st.rerun()
         
     st.markdown("### Student Grading Ledger")
@@ -211,21 +163,21 @@ def render_admin_console():
     else:
         st.info("No student records have been logged in the tracking database yet.")
 
-def render_assessment_screen():
-    elapsed = int(time.time() - st.session_state['start_time'])
+elif st.session_state.authenticated and not st.session_state.is_admin:
+    elapsed = int(time.time() - st.session_state.start_time)
     rem_time = max(0, (30 * 60) - elapsed)
     if rem_time <= 0:
-        save_assessment_record(st.session_state['user_id'], len(st.session_state['found_words']) * 2, st.session_state['start_time'])
-        st.session_state['authenticated'] = False
+        save_assessment_record(st.session_state.user_id, len(st.session_state.found_words)*2, st.session_state.start_time)
+        st.session_state.authenticated = False
         st.error("Time Expired! Your assessment has been auto-submitted.")
         time.sleep(2)
         st.rerun()
         
     mins, secs = divmod(rem_time, 60)
     col1, col2, col3 = st.columns(3)
-    col1.subheader(f"Candidate Session: {st.session_state['user_id']}")
+    col1.subheader(f"Candidate: {st.session_state.user_id}")
     col2.metric("Time Remaining", f"{mins:02d}:{secs:02d}")
-    current_score = len(st.session_state['found_words']) * 2
+    current_score = len(st.session_state.found_words) * 2
     col3.metric("Score", f"{current_score} Marks")
     
     st.markdown("---")
@@ -233,23 +185,37 @@ def render_assessment_screen():
     
     with left_layout:
         st.markdown("#### Word Search Puzzle Matrix")
-        grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:1rem; text-align:center;'>"
+        st.caption("Correctly verified words automatically highlight in green below 👇")
+        
+        # Build set of all cell coordinates that belong to found words
+        highlighted_coords = set()
+        for fw in st.session_state.found_words:
+            if fw in st.session_state.placements:
+                for coord in st.session_state.placements[fw]:
+                    highlighted_coords.add(coord)
+        
+        # Render grid with dynamic color styling based on discovered status
+        grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:0.85rem; text-align:center;'>"
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
-                letter = st.session_state['grid'][r][c]
-                grid_html += f"<div style='background-color:#ffffff; padding:2px; border:1px solid #dee2e6; color:#2c3e50;'>{letter}</div>"
+                letter = st.session_state.grid[r][c]
+                if (r, c) in highlighted_coords:
+                    # Highlight green for discovered words
+                    grid_html += f"<div style='background-color:#2ecc71; color:white; padding:4px 0; border-radius:2px;'>{letter}</div>"
+                else:
+                    grid_html += f"<div style='background-color:#f8f9fa; color:#2c3e50; padding:4px 0; border:1px solid #dee2e6; border-radius:2px;'>{letter}</div>"
         grid_html += "</div>"
         st.markdown(grid_html, unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
         guess = st.text_input("Type discovered term sequences in UPPERCASE:", key="word_guess", value="").strip().upper()
         if st.button("Verify Found Word", use_container_width=True):
-            if guess in WORDS_TO_FIND and guess not in st.session_state['found_words']:
-                st.session_state['found_words'].add(guess)
+            if guess in WORDS_TO_FIND and guess not in st.session_state.found_words:
+                st.session_state.found_words.add(guess)
                 st.success(f"Correct Sequence Authenticated: +2 Marks ({guess})")
                 time.sleep(0.5)
                 st.rerun()
-            elif guess in st.session_state['found_words']:
+            elif guess in st.session_state.found_words:
                 st.warning("Sequence has already been verified previously.")
             else:
                 st.error("Invalid sequence pattern entry matched.")
@@ -257,23 +223,62 @@ def render_assessment_screen():
     with right_layout:
         st.markdown("#### Assessment Questions (2 Marks Each)")
         for idx, item in enumerate(ASSESSMENT_DATA, 1):
-            is_done = item["a"] in st.session_state['found_words']
+            is_done = item["a"] in st.session_state.found_words
             if is_done:
                 st.markdown(f"~~{idx}. {item['q']}~~ 🟢 **[SOLVED]**")
             else:
                 st.markdown(f"*{idx}.* {item['q']}")
         st.markdown("---")
         if st.button("Finalize and Submit Examination Paper", type="primary", use_container_width=True):
-            save_assessment_record(st.session_state['user_id'], current_score, st.session_state['start_time'])
+            save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
             st.success(f"Submission recorded! Final Mark assigned: {current_score} Marks.")
             time.sleep(2)
-            st.session_state['authenticated'] = False
+            st.session_state.authenticated = False
             st.rerun()
 
-# ----------------- MAIN ROUTING CONTROLLER -----------------
-if not st.session_state['authenticated']:
-    render_login_gate()
-elif st.session_state['is_admin']:
-    render_admin_console()
 else:
-    render_assessment_screen()
+    st.title("Portal Authentication Gate")
+    user_code = st.text_input("Enter Student Number / Admin Staff Number:", value="", autocomplete="off")
+    if st.button("Authenticate & Access", use_container_width=True):
+        user_code = user_code.strip()
+        if user_code == ADMIN_STAFF_NUMBER:
+            st.session_state.authenticated = True
+            st.session_state.user_id = user_code
+            st.session_state.is_admin = True
+            st.rerun()
+        elif user_code in AUTHORIZED_STUDENTS:
+            db = SessionLocal()
+            existing = db.query(AssessmentResult).filter(AssessmentResult.student_number == user_code).first()
+            db.close()
+            if existing:
+                st.error("Authentication failed. This student record has already logged a grading attempt.")
+            else:
+                st.session_state.authenticated = True
+                st.session_state.user_id = user_code
+                st.session_state.is_admin = False
+                g, p = setup_assessment_matrix()
+                st.session_state.grid = g
+                st.session_state.placements = p
+                st.session_state.found_words = set()
+                st.session_state.start_time = time.time()
+                st.rerun()
+        else:
+            st.error("The code entered is not registered on the system.")
+
+    st.markdown("---")
+    with st.expander("🛠️ Admin Identity Override System"):
+        staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
+        alt_id = st.text_input("Create Alternate Student Identity String:", key="override_alt")
+        if st.button("Force Establish Session"):
+            if staff_code.strip() == ADMIN_STAFF_NUMBER and alt_id.strip():
+                st.session_state.authenticated = True
+                st.session_state.user_id = alt_id.strip()
+                st.session_state.is_admin = False
+                g, p = setup_assessment_matrix()
+                st.session_state.grid = g
+                st.session_state.placements = p
+                st.session_state.found_words = set()
+                st.session_state.start_time = time.time()
+                st.rerun()
+            else:
+                st.error("Invalid credentials or fields missing.")
