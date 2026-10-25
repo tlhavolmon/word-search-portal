@@ -8,7 +8,6 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # 1. Cloud-Optimized Write-Safe Database Configuration
-# Uses the temporary memory directory (/tmp) to completely bypass read-only server blocks
 DATABASE_URL = "sqlite:////tmp/assessment_portal.db"
 
 Base = declarative_base()
@@ -25,7 +24,7 @@ class AssessmentResult(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# 2. Immutable Operational Vectors & Security Rules
+# 2. Production Security Identity Collections
 ADMIN_STAFF_NUMBER = "22297812"
 AUTHORIZED_STUDENTS = {
     "30996724", "53269713", "47904844", "40801942", "55952453", "53351878", 
@@ -97,7 +96,7 @@ def setup_assessment_matrix():
                 break
     return grid, word_placements
 
-# Initialize Global App Memory Setup
+# Initialize Global App Memory
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 if 'user_id' not in st.session_state:
@@ -126,7 +125,7 @@ def save_assessment_record(student_id, final_score, start_epoch):
                 db.add(record)
                 db.commit()
         except Exception as e:
-            st.error(f"Database sync exception: {e}")
+            st.error(f"Database error: {e}")
         finally:
             db.close()
 
@@ -160,9 +159,9 @@ def render_login_gate():
                 st.rerun()
         else:
             st.error("The code entered is not registered on the system.")
-            
+
     st.markdown("---")
-    with st.expander("🛠️ Admin Identity Override System"):
+    with st.expander("Admin Identity Override System"):
         staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
         alt_id = st.text_input("Create Alternate Student Identity String:", key="override_alt")
         if st.button("Force Establish Session"):
@@ -187,4 +186,7 @@ def render_admin_console():
         st.rerun()
         
     st.title("Administrative Grade Console")
-    if st.button("🚀 Run Application Test (Practice Mode)"):
+    if st.button("Run Application Test (Practice Mode)", use_container_width=True):
+        st.session_state['user_id'] = "ADMIN-TEST"
+        st.session_state['is_admin'] = False
+        g, p = setup_assessment_matrix()
