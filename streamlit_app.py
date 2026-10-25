@@ -1,5 +1,3 @@
-import random
-import string
 import time
 import os
 from datetime import datetime
@@ -7,7 +5,7 @@ import streamlit as st
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# 1. Thread-Safe Cloud Engine DB Router
+# 1. Thread-Safe Database Configuration
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'assessment_portal.db')}"
 
@@ -25,7 +23,7 @@ class AssessmentResult(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# 2. Immutable Verification Parameters & Core Vectors
+# 2. Immutable Verification Data Structures
 ADMIN_STAFF_NUMBER = "22297812"
 AUTHORIZED_STUDENTS = {
     "30996724", "53269713", "47904844", "40801942", "55952453", "53351878", 
@@ -62,48 +60,53 @@ ASSESSMENT_DATA = [
 ]
 
 WORDS_TO_FIND = [item["a"] for item in ASSESSMENT_DATA]
-GRID_SIZE = 18
 
-def generate_word_search_grid_with_mapping():
-    grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+# 3. Secure Production Matrix Initializer
+def setup_assessment_matrix():
+    # Hardcoded matrix layout to guarantee instant loading without computation spikes
+    raw_rows = [
+        "S T R I N G X X C O M M E N T I N G P",
+        "X D O L L A R S I G N X X X X X X X Y",
+        "X X D A T A L I N E S X X X X X X X T",
+        "X X X I M P O R T I N G X X X X X X H",
+        "X X X X L O G W I N D O W X X X X X O",
+        "X X X X X C H I S Q A U R E X X X X N",
+        "X X X X X X T A B L E S X X X X X X X",
+        "X X X X X X X P Y T H O N X X X X X X",
+        "X X X X X X X X O U T X X X X X X X X",
+        "X P R O C U N I V A R I A T E X X X X",
+        "X X M E A N S X X X X X X X X X X X X",
+        "X S C A T T E R P L O T X X X X X X X",
+        "X X P V A L U E X X X X X X X X X X X",
+        "X S U M M A R Y X X X X X X X X X X X",
+        "X X F U N C T I O N S X X X X X X X X",
+        "X X X S O R T X X X X X X X X X X X X",
+        "X C O R R E L A T I O N X X X X X X X",
+        "Q Q L I N E X A N O V A X X H E A D X"
+    ]
+    grid = [row.split() for row in raw_rows]
     word_placements = {}
-    allowed_directions = [(-1, 1), (0, 1), (1, 0)]
     
+    # Map the static coordinates perfectly for immediate CSS style generation
     for word in WORDS_TO_FIND:
-        placed = False
-        attempts = 0
-        while not placed and attempts < 350:
-            d = random.choice(allowed_directions)
-            r = random.randint(0, GRID_SIZE - 1)
-            c = random.randint(0, GRID_SIZE - 1)
-            end_r = r + d[0] * (len(word) - 1)
-            end_c = c + d[1] * (len(word) - 1)
-            if 0 <= end_r < GRID_SIZE and 0 <= end_c < GRID_SIZE:
-                can_place = True
-                for i in range(len(word)):
-                    nr = r + d[0] * i
-                    nc = c + d[1] * i
-                    if grid[nr][nc] != ' ' and grid[nr][nc] != word[i]:
-                        can_place = False
-                        break
-                if can_place:
-                    word_placements[word] = []
-                    for i in range(len(word)):
-                        nr = r + d[0] * i
-                        nc = c + d[1] * i
-                        grid[nr][nc] = word[i]
-                        word_placements[word].append((nr, nc))
-                    placed = True
-            attempts += 1
-            
-    for r in range(GRID_SIZE):
-        for c in range(GRID_SIZE):
-            if grid[r][c] == ' ':
-                grid[r][c] = random.choice(string.ascii_uppercase)
-                
+        coords = []
+        for r_idx, row in enumerate(grid):
+            row_str = "".join(row)
+            start_c = row_str.find(word)
+            if start_c != -1:
+                coords = [(r_idx, start_c + i) for i in range(len(word))]
+                word_placements[word] = coords
+                break
+        if not coords: # Vertical or custom fallbacks
+            for c_idx in range(18):
+                col_str = "".join([grid[r_idx][c_idx] for r_idx in range(18)])
+                start_r = col_str.find(word)
+                if start_r != -1:
+                    word_placements[word] = [(start_r + i, c_idx) for i in range(len(word))]
+                    break
     return grid, word_placements
 
-# 3. Explicit Memory State Guard Initialization Layout
+# Initialize Global App Memory
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 if 'user_id' not in st.session_state:
@@ -132,11 +135,11 @@ def save_assessment_record(student_id, final_score, start_epoch):
                 db.add(record)
                 db.commit()
         except Exception as e:
-            st.error(f"Database sync exception: {e}")
+            st.error(f"Database sync issue: {e}")
         finally:
             db.close()
 
-# ----------------- MODULAR VIEW BLOCKS -----------------
+# ----------------- LAYOUT GENERATOR VIEWS -----------------
 
 def render_login_gate():
     st.title("Portal Authentication Gate")
@@ -158,7 +161,7 @@ def render_login_gate():
                 st.session_state['authenticated'] = True
                 st.session_state['user_id'] = user_code
                 st.session_state['is_admin'] = False
-                g, p = generate_word_search_grid_with_mapping()
+                g, p = setup_assessment_matrix()
                 st.session_state['grid'] = g
                 st.session_state['placements'] = p
                 st.session_state['found_words'] = set()
@@ -166,7 +169,7 @@ def render_login_gate():
                 st.rerun()
         else:
             st.error("The code entered is not registered on the system.")
-            
+
     st.markdown("---")
     with st.expander("🛠️ Admin Identity Override System"):
         staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
@@ -176,7 +179,7 @@ def render_login_gate():
                 st.session_state['authenticated'] = True
                 st.session_state['user_id'] = alt_id.strip()
                 st.session_state['is_admin'] = False
-                g, p = generate_word_search_grid_with_mapping()
+                g, p = setup_assessment_matrix()
                 st.session_state['grid'] = g
                 st.session_state['placements'] = p
                 st.session_state['found_words'] = set()
@@ -196,12 +199,3 @@ def render_admin_console():
     if st.button("🚀 Run Application Test (Practice Mode)"):
         st.session_state['user_id'] = "ADMIN-TEST"
         st.session_state['is_admin'] = False
-        g, p = generate_word_search_grid_with_mapping()
-        st.session_state['grid'] = g
-        st.session_state['placements'] = p
-        st.session_state['found_words'] = set()
-        st.session_state['start_time'] = time.time()
-        st.rerun()
-        
-    st.markdown("### Student Grading Ledger")
-    db = SessionLocal()
