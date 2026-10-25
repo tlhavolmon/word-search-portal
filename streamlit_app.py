@@ -63,9 +63,11 @@ ASSESSMENT_DATA = [
 WORDS_TO_FIND = [item["a"] for item in ASSESSMENT_DATA]
 GRID_SIZE = 18
 
-def generate_word_search_grid():
+def generate_word_search_grid_with_mapping():
     grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    word_placements = {} # Track exactly which grid cells are owned by which word sequence
     allowed_directions = [(-1, 1), (0, 1), (1, 0)]
+    
     for word in WORDS_TO_FIND:
         placed = False
         attempts = 0
@@ -83,21 +85,27 @@ def generate_word_search_grid():
                         can_place = False
                         break
                 if can_place:
+                    word_placements[word] = []
                     for i in range(len(word)):
-                        grid[r + d[0] * i][c + d[1] * i] = word[i]
+                        nr, nc = r + d[0] * i, c + d[1] * i
+                        grid[nr][nc] = word[i]
+                        word_placements[word].append((nr, nc))
                     placed = True
             attempts += 1
+            
     for r in range(GRID_SIZE):
         for c in range(GRID_SIZE):
             if grid[r][c] == ' ':
                 grid[r][c] = random.choice(string.ascii_uppercase)
-    return grid
+                
+    return grid, word_placements
 
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.user_id = None
     st.session_state.is_admin = False
     st.session_state.grid = None
+    st.session_state.placements = None
     st.session_state.found_words = set()
     st.session_state.start_time = None
 
@@ -132,7 +140,9 @@ if st.session_state.authenticated and st.session_state.is_admin:
     if st.button("🚀 Run Application Test (Practice Mode)"):
         st.session_state.user_id = "ADMIN-TEST"
         st.session_state.is_admin = False
-        st.session_state.grid = generate_word_search_grid()
+        g, p = generate_word_search_grid_with_mapping()
+        st.session_state.grid = g
+        st.session_state.placements = p
         st.session_state.found_words = set()
         st.session_state.start_time = time.time()
         st.rerun()
@@ -177,32 +187,21 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
     with left_layout:
         st.markdown("#### Word Search Puzzle Matrix")
         
+        # Gather all grid cell coordinates that are part of verified words
+        highlighted_coordinates = set()
+        for verified_word in st.session_state.found_words:
+            if verified_word in st.session_state.placements:
+                for coord in st.session_state.placements[verified_word]:
+                    highlighted_coordinates.add(coord)
+                    
+        # Construct and style individual grid matrix cells via dynamic inline attributes
         grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:1rem; text-align:center;'>"
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
                 letter = st.session_state.grid[r][c]
-                grid_html += f"<div style='background-color:#ffffff; padding:2px; border:1px solid #dee2e6; color:#2c3e50;'>{letter}</div>"
+                if (r, c) in highlighted_coordinates:
+                    # Original green highlight layout styling vector
+                    grid_html += f"<div style='background-color:#2ecc71; padding:2px; border:1px solid #27ae60; color:white;'>{letter}</div>"
+                else:
+                    grid_html += f"<div style='background-color:#ffffff; padding:2px; border:1px solid #dee2e6; color:#2c3e50;'>{letter}</div>"
         grid_html += "</div>"
-        st.markdown(grid_html, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        guess = st.text_input("Type discovered term sequences in UPPERCASE:", key="word_guess", value="").strip().upper()
-        if st.button("Verify Found Word", use_container_width=True):
-            if guess in WORDS_TO_FIND and guess not in st.session_state.found_words:
-                st.session_state.found_words.add(guess)
-                st.success(f"Correct Sequence Authenticated: +2 Marks ({guess})")
-                time.sleep(0.5)
-                st.rerun()
-            elif guess in st.session_state.found_words:
-                st.warning("Sequence has already been verified previously.")
-            else:
-                st.error("Invalid sequence pattern entry matched.")
-                
-    with right_layout:
-        st.markdown("#### Assessment Questions (2 Marks Each)")
-        for idx, item in enumerate(ASSESSMENT_DATA, 1):
-            is_done = item["a"] in st.session_state.found_words
-            if is_done:
-                st.markdown(f"~~{idx}. {item['q']}~~ 🟢 **[SOLVED]**")
-            else:
-                st.markdown(f"**{idx}.** {item['q']}")
