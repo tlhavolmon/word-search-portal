@@ -7,7 +7,7 @@ import streamlit as st
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Optimized cloud-compatible dynamic directory paths
+# 1. Cloud-Compatible Storage Framework Configuration
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'assessment_portal.db')}"
 
@@ -25,6 +25,7 @@ class AssessmentResult(Base):
 
 Base.metadata.create_all(bind=engine)
 
+# 2. Production Security Identity Collections
 ADMIN_STAFF_NUMBER = "22297812"
 AUTHORIZED_STUDENTS = {
     "30996724", "53269713", "47904844", "40801942", "55952453", "53351878", 
@@ -63,43 +64,56 @@ ASSESSMENT_DATA = [
 WORDS_TO_FIND = [item["a"] for item in ASSESSMENT_DATA]
 GRID_SIZE = 18
 
-def generate_word_search_grid():
+def generate_word_search_grid_with_mapping():
     grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    word_placements = {}
     allowed_directions = [(-1, 1), (0, 1), (1, 0)]
+    
     for word in WORDS_TO_FIND:
         placed = False
         attempts = 0
-        while not placed and attempts < 400:
+        while not placed and attempts < 250:
             d = random.choice(allowed_directions)
             r = random.randint(0, GRID_SIZE - 1)
             c = random.randint(0, GRID_SIZE - 1)
-            end_r = r + d[0] * (len(word) - 1)
-            end_c = c + d[1] * (len(word) - 1)
+            end_r = r + d * (len(word) - 1)
+            end_c = c + d * (len(word) - 1)
             if 0 <= end_r < GRID_SIZE and 0 <= end_c < GRID_SIZE:
                 can_place = True
                 for i in range(len(word)):
-                    nr, nc = r + d[0] * i, c + d[1] * i
+                    nr, nc = r + d * i, c + d * i
                     if grid[nr][nc] != ' ' and grid[nr][nc] != word[i]:
                         can_place = False
                         break
                 if can_place:
+                    word_placements[word] = []
                     for i in range(len(word)):
-                        grid[r + d[0] * i][c + d[1] * i] = word[i]
+                        nr, nc = r + d * i, c + d * i
+                        grid[nr][nc] = word[i]
+                        word_placements[word].append((nr, nc))
                     placed = True
             attempts += 1
+            
     for r in range(GRID_SIZE):
         for c in range(GRID_SIZE):
             if grid[r][c] == ' ':
                 grid[r][c] = random.choice(string.ascii_uppercase)
-    return grid
+                
+    return grid, word_placements
 
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.user_id = None
-    st.session_state.is_admin = False
-    st.session_state.grid = None
-    st.session_state.found_words = set()
-    st.session_state.start_time = None
+# Setup memory tracking structures securely
+session_defaults = {
+    'authenticated': False,
+    'user_id': None,
+    'is_admin': False,
+    'grid': None,
+    'placements': {},
+    'found_words': set(),
+    'start_time': None
+}
+for key, value in session_defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 def save_assessment_record(student_id, final_score, start_epoch):
     elapsed_seconds = int(time.time() - start_epoch)
@@ -119,9 +133,58 @@ def save_assessment_record(student_id, final_score, start_epoch):
         finally:
             db.close()
 
-# ----------------- APP RENDERING CONTROLS -----------------
+# ----------------- MODULAR VIEW BLOCKS -----------------
 
-if st.session_state.authenticated and st.session_state.is_admin:
+def render_login_gate():
+    st.title("Portal Authentication Gate")
+    user_code = st.text_input("Enter Student Number / Admin Staff Number:", value="", autocomplete="off")
+    
+    if st.button("Authenticate & Access", use_container_width=True):
+        user_code = user_code.strip()
+        if user_code == ADMIN_STAFF_NUMBER:
+            st.session_state.authenticated = True
+            st.session_state.user_id = user_code
+            st.session_state.is_admin = True
+            st.rerun()
+        elif user_code in AUTHORIZED_STUDENTS:
+            db = SessionLocal()
+            existing = db.query(AssessmentResult).filter(AssessmentResult.student_number == user_code).first()
+            db.close()
+            
+            if existing:
+                st.error("Authentication failed. This student record has already logged a grading attempt.")
+            else:
+                st.session_state.authenticated = True
+                st.session_state.user_id = user_code
+                st.session_state.is_admin = False
+                g, p = generate_word_search_grid_with_mapping()
+                st.session_state.grid = g
+                st.session_state.placements = p
+                st.session_state.found_words = set()
+                st.session_state.start_time = time.time()
+                st.rerun()
+        else:
+            st.error("The code entered is not registered on the system.")
+
+    st.markdown("---")
+    with st.expander("🛠️ Admin Identity Override System"):
+        staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
+        alt_id = st.text_input("Create Alternate Student Identity String:", key="override_alt")
+        if st.button("Force Establish Session"):
+            if staff_code.strip() == ADMIN_STAFF_NUMBER and alt_id.strip():
+                st.session_state.authenticated = True
+                st.session_state.user_id = alt_id.strip()
+                st.session_state.is_admin = False
+                g, p = generate_word_search_grid_with_mapping()
+                st.session_state.grid = g
+                st.session_state.placements = p
+                st.session_state.found_words = set()
+                st.session_state.start_time = time.time()
+                st.rerun()
+            else:
+                st.error("Invalid credentials or fields missing.")
+
+def render_admin_console():
     st.sidebar.title("Admin Console")
     if st.sidebar.button("Sign Out"):
         st.session_state.authenticated = False
@@ -132,7 +195,9 @@ if st.session_state.authenticated and st.session_state.is_admin:
     if st.button("🚀 Run Application Test (Practice Mode)"):
         st.session_state.user_id = "ADMIN-TEST"
         st.session_state.is_admin = False
-        st.session_state.grid = generate_word_search_grid()
+        g, p = generate_word_search_grid_with_mapping()
+        st.session_state.grid = g
+        st.session_state.placements = p
         st.session_state.found_words = set()
         st.session_state.start_time = time.time()
         st.rerun()
@@ -149,60 +214,3 @@ if st.session_state.authenticated and st.session_state.is_admin:
             "Duration": r.duration, 
             "Submission Timestamp": r.submission_time.strftime('%Y-%m-%d %H:%M:%S')
         } for r in records]
-        st.table(table_data)
-    else:
-        st.info("No student records have been logged in the tracking database yet.")
-
-elif st.session_state.authenticated and not st.session_state.is_admin:
-    elapsed = int(time.time() - st.session_state.start_time)
-    rem_time = max(0, (30 * 60) - elapsed)
-    
-    if rem_time <= 0:
-        save_assessment_record(st.session_state.user_id, len(st.session_state.found_words)*2, st.session_state.start_time)
-        st.session_state.authenticated = False
-        st.error("Time Expired! Your assessment has been auto-submitted.")
-        time.sleep(2)
-        st.rerun()
-
-    mins, secs = divmod(rem_time, 60)
-    col1, col2, col3 = st.columns(3)
-    col1.subheader(f"Candidate Session: {st.session_state.user_id}")
-    col2.metric("Time Remaining", f"{mins:02d}:{secs:02d}")
-    current_score = len(st.session_state.found_words) * 2
-    col3.metric("Score", f"{current_score} Marks")
-    
-    st.markdown("---")
-    left_layout, right_layout = st.columns(2)
-    
-    with left_layout:
-        st.markdown("#### Word Search Puzzle Matrix")
-        
-        grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:1rem; text-align:center;'>"
-        for r in range(GRID_SIZE):
-            for c in range(GRID_SIZE):
-                letter = st.session_state.grid[r][c]
-                grid_html += f"<div style='background-color:#ffffff; padding:2px; border:1px solid #dee2e6; color:#2c3e50;'>{letter}</div>"
-        grid_html += "</div>"
-        st.markdown(grid_html, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        guess = st.text_input("Type discovered term sequences in UPPERCASE:", key="word_guess", value="").strip().upper()
-        if st.button("Verify Found Word", use_container_width=True):
-            if guess in WORDS_TO_FIND and guess not in st.session_state.found_words:
-                st.session_state.found_words.add(guess)
-                st.success(f"Correct Sequence Authenticated: +2 Marks ({guess})")
-                time.sleep(0.5)
-                st.rerun()
-            elif guess in st.session_state.found_words:
-                st.warning("Sequence has already been verified previously.")
-            else:
-                st.error("Invalid sequence pattern entry matched.")
-                
-    with right_layout:
-        st.markdown("#### Assessment Questions (2 Marks Each)")
-        for idx, item in enumerate(ASSESSMENT_DATA, 1):
-            is_done = item["a"] in st.session_state.found_words
-            if is_done:
-                st.markdown(f"~~{idx}. {item['q']}~~ 🟢 **[SOLVED]**")
-            else:
-                st.markdown(f"**{idx}.** {item['q']}")
