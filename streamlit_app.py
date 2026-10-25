@@ -190,3 +190,90 @@ def render_admin_console():
         st.session_state['user_id'] = "ADMIN-TEST"
         st.session_state['is_admin'] = False
         g, p = setup_assessment_matrix()
+        st.session_state['grid'] = g
+        st.session_state['placements'] = p
+        st.session_state['found_words'] = set()
+        st.session_state['start_time'] = time.time()
+        st.rerun()
+        
+    st.markdown("### Student Grading Ledger")
+    db = SessionLocal()
+    records = db.query(AssessmentResult).all()
+    db.close()
+    if records:
+        table_data = [{
+            "Student Number": r.student_number, 
+            "Final Mark": f"{r.score} Marks", 
+            "Duration": r.duration, 
+            "Submission Timestamp": r.submission_time.strftime('%Y-%m-%d %H:%M:%S')
+        } for r in records]
+        st.table(table_data)
+    else:
+        st.info("No student records have been logged in the tracking database yet.")
+
+def render_assessment_screen():
+    elapsed = int(time.time() - st.session_state['start_time'])
+    rem_time = max(0, (30 * 60) - elapsed)
+    if rem_time <= 0:
+        save_assessment_record(st.session_state['user_id'], len(st.session_state['found_words']) * 2, st.session_state['start_time'])
+        st.session_state['authenticated'] = False
+        st.error("Time Expired! Your assessment has been auto-submitted.")
+        time.sleep(2)
+        st.rerun()
+        
+    mins, secs = divmod(rem_time, 60)
+    col1, col2, col3 = st.columns(3)
+    col1.subheader(f"Candidate Session: {st.session_state['user_id']}")
+    col2.metric("Time Remaining", f"{mins:02d}:{secs:02d}")
+    current_score = len(st.session_state['found_words']) * 2
+    col3.metric("Score", f"{current_score} Marks")
+    
+    st.markdown("---")
+    left_layout, right_layout = st.columns(2)
+    
+    with left_layout:
+        st.markdown("#### Word Search Puzzle Matrix")
+        grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:1rem; text-align:center;'>"
+        for r in range(GRID_SIZE):
+            for c in range(GRID_SIZE):
+                letter = st.session_state['grid'][r][c]
+                grid_html += f"<div style='background-color:#ffffff; padding:2px; border:1px solid #dee2e6; color:#2c3e50;'>{letter}</div>"
+        grid_html += "</div>"
+        st.markdown(grid_html, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        guess = st.text_input("Type discovered term sequences in UPPERCASE:", key="word_guess", value="").strip().upper()
+        if st.button("Verify Found Word", use_container_width=True):
+            if guess in WORDS_TO_FIND and guess not in st.session_state['found_words']:
+                st.session_state['found_words'].add(guess)
+                st.success(f"Correct Sequence Authenticated: +2 Marks ({guess})")
+                time.sleep(0.5)
+                st.rerun()
+            elif guess in st.session_state['found_words']:
+                st.warning("Sequence has already been verified previously.")
+            else:
+                st.error("Invalid sequence pattern entry matched.")
+                
+    with right_layout:
+        st.markdown("#### Assessment Questions (2 Marks Each)")
+        for idx, item in enumerate(ASSESSMENT_DATA, 1):
+            is_done = item["a"] in st.session_state['found_words']
+            if is_done:
+                st.markdown(f"~~{idx}. {item['q']}~~ 🟢 **[SOLVED]**")
+            else:
+                st.markdown(f"*{idx}.* {item['q']}")
+        st.markdown("---")
+        if st.button("Finalize and Submit Examination Paper", type="primary", use_container_width=True):
+            save_assessment_record(st.session_state['user_id'], current_score, st.session_state['start_time'])
+            st.success(f"Submission recorded! Final Mark assigned: {current_score} Marks.")
+            time.sleep(2)
+            st.session_state['authenticated'] = False
+            st.rerun()
+
+# ----------------- MAIN ROUTING CONTROLLER -----------------
+if not st.session_state['authenticated']:
+    render_login_gate()
+elif st.session_state['is_admin']:
+    render_admin_console()
+else:
+    render_assessment_screen()
