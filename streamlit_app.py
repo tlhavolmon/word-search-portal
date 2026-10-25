@@ -65,7 +65,7 @@ GRID_SIZE = 18
 
 def generate_word_search_grid_with_mapping():
     grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
-    word_placements = {} # Track exactly which grid cells are owned by which word sequence
+    word_placements = {}
     allowed_directions = [(-1, 1), (0, 1), (1, 0)]
     
     for word in WORDS_TO_FIND:
@@ -75,19 +75,19 @@ def generate_word_search_grid_with_mapping():
             d = random.choice(allowed_directions)
             r = random.randint(0, GRID_SIZE - 1)
             c = random.randint(0, GRID_SIZE - 1)
-            end_r = r + d[0] * (len(word) - 1)
-            end_c = c + d[1] * (len(word) - 1)
+            end_r = r + d * (len(word) - 1)
+            end_c = c + d * (len(word) - 1)
             if 0 <= end_r < GRID_SIZE and 0 <= end_c < GRID_SIZE:
                 can_place = True
                 for i in range(len(word)):
-                    nr, nc = r + d[0] * i, c + d[1] * i
+                    nr, nc = r + d * i, c + d * i
                     if grid[nr][nc] != ' ' and grid[nr][nc] != word[i]:
                         can_place = False
                         break
                 if can_place:
                     word_placements[word] = []
                     for i in range(len(word)):
-                        nr, nc = r + d[0] * i, c + d[1] * i
+                        nr, nc = r + d * i, c + d * i
                         grid[nr][nc] = word[i]
                         word_placements[word].append((nr, nc))
                     placed = True
@@ -100,14 +100,19 @@ def generate_word_search_grid_with_mapping():
                 
     return grid, word_placements
 
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.user_id = None
-    st.session_state.is_admin = False
-    st.session_state.grid = None
-    st.session_state.placements = None
-    st.session_state.found_words = set()
-    st.session_state.start_time = None
+# Bulletproof Initialization: Force defaults for missing keys on every rerun
+session_defaults = {
+    'authenticated': False,
+    'user_id': None,
+    'is_admin': False,
+    'grid': None,
+    'placements': {},
+    'found_words': set(),
+    'start_time': None
+}
+for key, value in session_defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 def save_assessment_record(student_id, final_score, start_epoch):
     elapsed_seconds = int(time.time() - start_epoch)
@@ -129,7 +134,7 @@ def save_assessment_record(student_id, final_score, start_epoch):
 
 # ----------------- APP RENDERING CONTROLS -----------------
 
-if st.session_state.authenticated and st.session_state.is_admin:
+if st.session_state.get('authenticated') and st.session_state.get('is_admin'):
     st.sidebar.title("Admin Console")
     if st.sidebar.button("Sign Out"):
         st.session_state.authenticated = False
@@ -163,12 +168,12 @@ if st.session_state.authenticated and st.session_state.is_admin:
     else:
         st.info("No student records have been logged in the tracking database yet.")
 
-elif st.session_state.authenticated and not st.session_state.is_admin:
-    elapsed = int(time.time() - st.session_state.start_time)
+elif st.session_state.get('authenticated') and not st.session_state.get('is_admin'):
+    elapsed = int(time.time() - st.session_state.get('start_time', time.time()))
     rem_time = max(0, (30 * 60) - elapsed)
     
     if rem_time <= 0:
-        save_assessment_record(st.session_state.user_id, len(st.session_state.found_words)*2, st.session_state.start_time)
+        save_assessment_record(st.session_state.user_id, len(st.session_state.get('found_words', set()))*2, st.session_state.start_time)
         st.session_state.authenticated = False
         st.error("Time Expired! Your assessment has been auto-submitted.")
         time.sleep(2)
@@ -176,9 +181,9 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
 
     mins, secs = divmod(rem_time, 60)
     col1, col2, col3 = st.columns(3)
-    col1.subheader(f"Candidate Session: {st.session_state.user_id}")
+    col1.subheader(f"Candidate Session: {st.session_state.get('user_id')}")
     col2.metric("Time Remaining", f"{mins:02d}:{secs:02d}")
-    current_score = len(st.session_state.found_words) * 2
+    current_score = len(st.session_state.get('found_words', set())) * 2
     col3.metric("Score", f"{current_score} Marks")
     
     st.markdown("---")
@@ -187,21 +192,19 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
     with left_layout:
         st.markdown("#### Word Search Puzzle Matrix")
         
-        # Gather all grid cell coordinates that are part of verified words
+        # Safe coordinates extraction using a fallback dictionary get mechanism
         highlighted_coordinates = set()
-        for verified_word in st.session_state.found_words:
-            if verified_word in st.session_state.placements:
-                for coord in st.session_state.placements[verified_word]:
+        active_placements = st.session_state.get('placements', {}) or {}
+        for verified_word in st.session_state.get('found_words', set()):
+            if verified_word in active_placements:
+                for coord in active_placements[verified_word]:
                     highlighted_coordinates.add(coord)
                     
-        # Construct and style individual grid matrix cells via dynamic inline attributes
+        current_grid = st.session_state.get('grid', [])
         grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:1rem; text-align:center;'>"
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
-                letter = st.session_state.grid[r][c]
+                letter = current_grid[r][c] if r < len(current_grid) and c < len(current_grid[r]) else " "
                 if (r, c) in highlighted_coordinates:
-                    # Original green highlight layout styling vector
                     grid_html += f"<div style='background-color:#2ecc71; padding:2px; border:1px solid #27ae60; color:white;'>{letter}</div>"
                 else:
-                    grid_html += f"<div style='background-color:#ffffff; padding:2px; border:1px solid #dee2e6; color:#2c3e50;'>{letter}</div>"
-        grid_html += "</div>"
