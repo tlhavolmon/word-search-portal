@@ -7,7 +7,7 @@ import streamlit as st
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Optimized cloud-compatible dynamic directory paths
+# 1. Cloud-Compatible Storage Framework Configuration
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'assessment_portal.db')}"
 
@@ -25,6 +25,7 @@ class AssessmentResult(Base):
 
 Base.metadata.create_all(bind=engine)
 
+# 2. Production Security Identity Collections
 ADMIN_STAFF_NUMBER = "22297812"
 AUTHORIZED_STUDENTS = {
     "30996724", "53269713", "47904844", "40801942", "55952453", "53351878", 
@@ -75,19 +76,19 @@ def generate_word_search_grid_with_mapping():
             d = random.choice(allowed_directions)
             r = random.randint(0, GRID_SIZE - 1)
             c = random.randint(0, GRID_SIZE - 1)
-            end_r = r + d[0] * (len(word) - 1)
-            end_c = c + d[1] * (len(word) - 1)
+            end_r = r + d * (len(word) - 1)
+            end_c = c + d * (len(word) - 1)
             if 0 <= end_r < GRID_SIZE and 0 <= end_c < GRID_SIZE:
                 can_place = True
                 for i in range(len(word)):
-                    nr, nc = r + d[0] * i, c + d[1] * i
+                    nr, nc = r + d * i, c + d * i
                     if grid[nr][nc] != ' ' and grid[nr][nc] != word[i]:
                         can_place = False
                         break
                 if can_place:
                     word_placements[word] = []
                     for i in range(len(word)):
-                        nr, nc = r + d[0] * i, c + d[1] * i
+                        nr, nc = r + d * i, c + d * i
                         grid[nr][nc] = word[i]
                         word_placements[word].append((nr, nc))
                     placed = True
@@ -132,9 +133,58 @@ def save_assessment_record(student_id, final_score, start_epoch):
         finally:
             db.close()
 
-# ----------------- ROUTING VIEW SYSTEMS -----------------
+# ----------------- MODULAR VIEW BLOCKS -----------------
 
-if st.session_state.get('authenticated') and st.session_state.get('is_admin'):
+def render_login_gate():
+    st.title("Portal Authentication Gate")
+    user_code = st.text_input("Enter Student Number / Admin Staff Number:", value="", autocomplete="off")
+    
+    if st.button("Authenticate & Access", use_container_width=True):
+        user_code = user_code.strip()
+        if user_code == ADMIN_STAFF_NUMBER:
+            st.session_state.authenticated = True
+            st.session_state.user_id = user_code
+            st.session_state.is_admin = True
+            st.rerun()
+        elif user_code in AUTHORIZED_STUDENTS:
+            db = SessionLocal()
+            existing = db.query(AssessmentResult).filter(AssessmentResult.student_number == user_code).first()
+            db.close()
+            
+            if existing:
+                st.error("Authentication failed. This student record has already logged a grading attempt.")
+            else:
+                st.session_state.authenticated = True
+                st.session_state.user_id = user_code
+                st.session_state.is_admin = False
+                g, p = generate_word_search_grid_with_mapping()
+                st.session_state.grid = g
+                st.session_state.placements = p
+                st.session_state.found_words = set()
+                st.session_state.start_time = time.time()
+                st.rerun()
+        else:
+            st.error("The code entered is not registered on the system.")
+
+    st.markdown("---")
+    with st.expander("🛠️ Admin Identity Override System"):
+        staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
+        alt_id = st.text_input("Create Alternate Student Identity String:", key="override_alt")
+        if st.button("Force Establish Session"):
+            if staff_code.strip() == ADMIN_STAFF_NUMBER and alt_id.strip():
+                st.session_state.authenticated = True
+                st.session_state.user_id = alt_id.strip()
+                st.session_state.is_admin = False
+                g, p = generate_word_search_grid_with_mapping()
+                st.session_state.grid = g
+                st.session_state.placements = p
+                st.session_state.found_words = set()
+                st.session_state.start_time = time.time()
+                st.rerun()
+            else:
+                st.error("Invalid credentials or fields missing.")
+
+def render_admin_console():
     st.sidebar.title("Admin Console")
     if st.sidebar.button("Sign Out"):
         st.session_state.authenticated = False
@@ -166,48 +216,3 @@ if st.session_state.get('authenticated') and st.session_state.get('is_admin'):
         } for r in records]
         st.table(table_data)
     else:
-        st.info("No student records have been logged in the tracking database yet.")
-
-elif st.session_state.get('authenticated') and not st.session_state.get('is_admin'):
-    elapsed = int(time.time() - st.session_state.get('start_time', time.time()))
-    rem_time = max(0, (30 * 60) - elapsed)
-    
-    if rem_time <= 0:
-        save_assessment_record(st.session_state.user_id, len(st.session_state.get('found_words', set()))*2, st.session_state.start_time)
-        st.session_state.authenticated = False
-        st.error("Time Expired! Your assessment has been auto-submitted.")
-        time.sleep(2)
-        st.rerun()
-
-    mins, secs = divmod(rem_time, 60)
-    col1, col2, col3 = st.columns(3)
-    col1.subheader(f"Candidate Session: {st.session_state.get('user_id')}")
-    col2.metric("Time Remaining", f"{mins:02d}:{secs:02d}")
-    current_score = len(st.session_state.get('found_words', set())) * 2
-    col3.metric("Score", f"{current_score} Marks")
-    
-    st.markdown("---")
-    left_layout, right_layout = st.columns(2)
-    
-    with left_layout:
-        st.markdown("#### Word Search Puzzle Matrix")
-        
-        highlighted_coordinates = set()
-        active_placements = st.session_state.get('placements', {}) or {}
-        for verified_word in st.session_state.get('found_words', set()):
-            if verified_word in active_placements:
-                for coord in active_placements[verified_word]:
-                    highlighted_coordinates.add(coord)
-                    
-        current_grid = st.session_state.get('grid', [])
-        grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:1rem; text-align:center;'>"
-        for r in range(GRID_SIZE):
-            for c in range(GRID_SIZE):
-                if r < len(current_grid) and c < len(current_grid[r]):
-                    letter = current_grid[r][c]
-                else:
-                    letter = " "
-                
-                if (r, c) in highlighted_coordinates:
-                    grid_html += f"<div style='background-color:#2ecc71; padding:2px; border:1px solid #27ae60; color:white;'>{letter}</div>"
-                else:
