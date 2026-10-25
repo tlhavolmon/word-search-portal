@@ -1,3 +1,5 @@
+import random
+import string
 import time
 import os
 from datetime import datetime
@@ -5,9 +7,9 @@ import streamlit as st
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# 1. Thread-Safe Database Configuration
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'assessment_portal.db')}"
+# 1. Cloud-Optimized Write-Safe Database Configuration
+# Uses the temporary memory directory (/tmp) to completely bypass read-only server blocks
+DATABASE_URL = "sqlite:////tmp/assessment_portal.db"
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -23,7 +25,7 @@ class AssessmentResult(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# 2. Immutable Verification Data Structures
+# 2. Immutable Operational Vectors & Security Rules
 ADMIN_STAFF_NUMBER = "22297812"
 AUTHORIZED_STUDENTS = {
     "30996724", "53269713", "47904844", "40801942", "55952453", "53351878", 
@@ -60,34 +62,30 @@ ASSESSMENT_DATA = [
 ]
 
 WORDS_TO_FIND = [item["a"] for item in ASSESSMENT_DATA]
+GRID_SIZE = 18
 
-# 3. Secure Production Matrix Initializer
 def setup_assessment_matrix():
-    # Hardcoded matrix layout to guarantee instant loading without computation spikes
-    raw_rows = [
-        "S T R I N G X X C O M M E N T I N G P",
-        "X D O L L A R S I G N X X X X X X X Y",
-        "X X D A T A L I N E S X X X X X X X T",
-        "X X X I M P O R T I N G X X X X X X H",
-        "X X X X L O G W I N D O W X X X X X O",
-        "X X X X X C H I S Q A U R E X X X X N",
-        "X X X X X X T A B L E S X X X X X X X",
-        "X X X X X X X P Y T H O N X X X X X X",
-        "X X X X X X X X O U T X X X X X X X X",
-        "X P R O C U N I V A R I A T E X X X X",
-        "X X M E A N S X X X X X X X X X X X X",
-        "X S C A T T E R P L O T X X X X X X X",
-        "X X P V A L U E X X X X X X X X X X X",
-        "X S U M M A R Y X X X X X X X X X X X",
-        "X X F U N C T I O N S X X X X X X X X",
-        "X X X S O R T X X X X X X X X X X X X",
-        "X C O R R E L A T I O N X X X X X X X",
-        "Q Q L I N E X A N O V A X X H E A D X"
+    grid = [
+        ["S","T","R","I","N","G","X","X","C","O","M","M","E","N","T","I","N","G"],
+        ["X","D","O","L","L","A","R","S","I","G","N","X","X","X","X","X","X","X"],
+        ["X","X","D","A","T","A","L","I","N","E","S","X","X","X","X","X","X","X"],
+        ["X","X","X","I","M","P","O","R","T","I","N","G","X","X","X","X","X","X"],
+        ["X","X","X","X","L","O","G","W","I","N","D","O","W","X","X","X","X","X"],
+        ["X","X","X","X","X","C","H","I","S","Q","A","U","R","E","X","X","X","X"],
+        ["X","X","X","X","X","X","T","A","B","L","E","S","X","X","X","X","X","X"],
+        ["X","X","X","X","X","X","X","P","Y","T","H","O","N","X","X","X","X","X"],
+        ["X","X","X","X","X","X","X","X","O","U","T","X","X","X","X","X","X","X"],
+        ["X","P","R","O","C","U","N","I","V","A","R","I","A","T","E","X","X","X"],
+        ["X","X","M","E","A","N","S","X","X","X","X","X","X","X","X","X","X","X"],
+        ["X","S","C","A","T","T","E","R","P","L","O","T","X","X","X","X","X","X"],
+        ["X","X","P","V","A","L","U","E","X","X","X","X","X","X","X","X","X","X"],
+        ["X","S","U","M","M","A","R","Y","X","X","X","X","X","X","X","X","X","X"],
+        ["X","X","F","U","N","C","T","I","O","N","S","X","X","X","X","X","X","X"],
+        ["X","X","X","S","O","R","T","X","X","X","X","X","X","X","X","X","X","X"],
+        ["X","C","O","R","R","E","L","A","T","I","O","N","X","X","X","X","X","X"],
+        ["Q","Q","L","I","N","E","X","A","N","O","V","A","X","X","H","E","A","D"]
     ]
-    grid = [row.split() for row in raw_rows]
     word_placements = {}
-    
-    # Map the static coordinates perfectly for immediate CSS style generation
     for word in WORDS_TO_FIND:
         coords = []
         for r_idx, row in enumerate(grid):
@@ -97,16 +95,9 @@ def setup_assessment_matrix():
                 coords = [(r_idx, start_c + i) for i in range(len(word))]
                 word_placements[word] = coords
                 break
-        if not coords: # Vertical or custom fallbacks
-            for c_idx in range(18):
-                col_str = "".join([grid[r_idx][c_idx] for r_idx in range(18)])
-                start_r = col_str.find(word)
-                if start_r != -1:
-                    word_placements[word] = [(start_r + i, c_idx) for i in range(len(word))]
-                    break
     return grid, word_placements
 
-# Initialize Global App Memory
+# Initialize Global App Memory Setup
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 if 'user_id' not in st.session_state:
@@ -135,11 +126,11 @@ def save_assessment_record(student_id, final_score, start_epoch):
                 db.add(record)
                 db.commit()
         except Exception as e:
-            st.error(f"Database sync issue: {e}")
+            st.error(f"Database sync exception: {e}")
         finally:
             db.close()
 
-# ----------------- LAYOUT GENERATOR VIEWS -----------------
+# ----------------- MODULAR RENDERING BLOCKS -----------------
 
 def render_login_gate():
     st.title("Portal Authentication Gate")
@@ -169,7 +160,7 @@ def render_login_gate():
                 st.rerun()
         else:
             st.error("The code entered is not registered on the system.")
-
+            
     st.markdown("---")
     with st.expander("🛠️ Admin Identity Override System"):
         staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
@@ -197,5 +188,3 @@ def render_admin_console():
         
     st.title("Administrative Grade Console")
     if st.button("🚀 Run Application Test (Practice Mode)"):
-        st.session_state['user_id'] = "ADMIN-TEST"
-        st.session_state['is_admin'] = False
