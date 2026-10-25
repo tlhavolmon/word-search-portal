@@ -100,7 +100,7 @@ def generate_word_search_grid_with_mapping():
                 
     return grid, word_placements
 
-# Bulletproof Initialization: Force defaults for missing keys on every rerun
+# Bulletproof Initialization Loop
 session_defaults = {
     'authenticated': False,
     'user_id': None,
@@ -192,7 +192,6 @@ elif st.session_state.get('authenticated') and not st.session_state.get('is_admi
     with left_layout:
         st.markdown("#### Word Search Puzzle Matrix")
         
-        # Safe coordinates extraction using a fallback dictionary get mechanism
         highlighted_coordinates = set()
         active_placements = st.session_state.get('placements', {}) or {}
         for verified_word in st.session_state.get('found_words', set()):
@@ -208,3 +207,7 @@ elif st.session_state.get('authenticated') and not st.session_state.get('is_admi
                 if (r, c) in highlighted_coordinates:
                     grid_html += f"<div style='background-color:#2ecc71; padding:2px; border:1px solid #27ae60; color:white;'>{letter}</div>"
                 else:
+                    grid_html += f"<div style='background-color:#ffffff; padding:2px; border:1px solid #dee2e6; color:#2c3e50;'>{letter}</div>"
+        grid_html += "</div>"
+        st.markdown(grid_html, unsafe_allow_html=True)
+        
