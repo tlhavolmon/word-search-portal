@@ -71,23 +71,23 @@ def generate_word_search_grid_with_mapping():
     for word in WORDS_TO_FIND:
         placed = False
         attempts = 0
-        while not placed and attempts < 400:
+        while not placed and attempts < 250:
             d = random.choice(allowed_directions)
             r = random.randint(0, GRID_SIZE - 1)
             c = random.randint(0, GRID_SIZE - 1)
-            end_r = r + d * (len(word) - 1)
-            end_c = c + d * (len(word) - 1)
+            end_r = r + d[0] * (len(word) - 1)
+            end_c = c + d[1] * (len(word) - 1)
             if 0 <= end_r < GRID_SIZE and 0 <= end_c < GRID_SIZE:
                 can_place = True
                 for i in range(len(word)):
-                    nr, nc = r + d * i, c + d * i
+                    nr, nc = r + d[0] * i, c + d[1] * i
                     if grid[nr][nc] != ' ' and grid[nr][nc] != word[i]:
                         can_place = False
                         break
                 if can_place:
                     word_placements[word] = []
                     for i in range(len(word)):
-                        nr, nc = r + d * i, c + d * i
+                        nr, nc = r + d[0] * i, c + d[1] * i
                         grid[nr][nc] = word[i]
                         word_placements[word].append((nr, nc))
                     placed = True
@@ -100,7 +100,7 @@ def generate_word_search_grid_with_mapping():
                 
     return grid, word_placements
 
-# Bulletproof Initialization Loop
+# Setup memory tracking structures
 session_defaults = {
     'authenticated': False,
     'user_id': None,
@@ -132,7 +132,7 @@ def save_assessment_record(student_id, final_score, start_epoch):
         finally:
             db.close()
 
-# ----------------- APP RENDERING CONTROLS -----------------
+# ----------------- ROUTING VIEW SYSTEMS -----------------
 
 if st.session_state.get('authenticated') and st.session_state.get('is_admin'):
     st.sidebar.title("Admin Console")
@@ -203,11 +203,11 @@ elif st.session_state.get('authenticated') and not st.session_state.get('is_admi
         grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:1rem; text-align:center;'>"
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
-                letter = current_grid[r][c] if r < len(current_grid) and c < len(current_grid[r]) else " "
+                if r < len(current_grid) and c < len(current_grid[r]):
+                    letter = current_grid[r][c]
+                else:
+                    letter = " "
+                
                 if (r, c) in highlighted_coordinates:
                     grid_html += f"<div style='background-color:#2ecc71; padding:2px; border:1px solid #27ae60; color:white;'>{letter}</div>"
                 else:
-                    grid_html += f"<div style='background-color:#ffffff; padding:2px; border:1px solid #dee2e6; color:#2c3e50;'>{letter}</div>"
-        grid_html += "</div>"
-        st.markdown(grid_html, unsafe_allow_html=True)
-        
