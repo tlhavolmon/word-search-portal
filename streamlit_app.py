@@ -27,13 +27,12 @@ Base.metadata.create_all(bind=engine)
 
 ADMIN_STAFF_NUMBER = "22297812"
 AUTHORIZED_STUDENTS = {
-    "30996724", "53269713", "47904844", "40801942", "55952453", "53351878", 
-    "38848058", "49539817", "52502058", "47043709", "34331646", "37182927", 
-    "55246109", "47943203", "55950027", "54790352", "56161786", "52028356", 
-    "37988530", "45706719", "42926289", "4612054",  "39313913", "46833684", 
-    "43463827", "38746239", "45430373", "45389764", "45670080", "51473925", 
-    "51633515", "53974123", "32500890", "54589363", "55849873", "46528504", 
-    "52207048", "46490078", "42702798", "55864937", "45214115", "52246183"
+    "30996724", "53269713", "47904844", "40801942", "55952453", "53351878", "38848058", "49539817", 
+    "52502058", "47043709", "34331646", "37182927", "55246109", "47943203", "55950027", "54790352", 
+    "56161786", "52028356", "37988530", "45706719", "42926289", "4612054", "39313913", "46833684", 
+    "43463827", "38746239", "45430373", "45389764", "45670080", "51473925", "51633515", "53974123", 
+    "32500890", "54589363", "55849873", "46528504", "52207048", "46490078", "42702798", "55864937", 
+    "45214115", "52246183"
 }
 
 ASSESSMENT_DATA = [
@@ -63,11 +62,11 @@ ASSESSMENT_DATA = [
 GRID_SIZE = 18
 
 def generate_word_search_grid(words_list):
-    """Generates a randomized word search grid where words ONLY read forward (Right, Down, Diagonal-Down-Right)."""
+    """Generates a randomized word search grid where words ONLY read forward."""
     grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
     allowed_directions = [(0, 1), (1, 0), (1, 1)]
-    
     word_placements = {}
+    
     for word in words_list:
         placed = False
         attempts = 0
@@ -75,6 +74,7 @@ def generate_word_search_grid(words_list):
             d = random.choice(allowed_directions)
             r = random.randint(0, GRID_SIZE - 1)
             c = random.randint(0, GRID_SIZE - 1)
+            
             end_r = r + d[0] * (len(word) - 1)
             end_c = c + d[1] * (len(word) - 1)
             
@@ -100,7 +100,6 @@ def generate_word_search_grid(words_list):
         for c in range(GRID_SIZE):
             if grid[r][c] == ' ':
                 grid[r][c] = random.choice(string.ascii_uppercase)
-                
     return grid, word_placements
 
 # Initialize App Session Memory
@@ -122,11 +121,14 @@ if 'start_time' not in st.session_state:
     st.session_state.start_time = None
 if 'completed_submitted' not in st.session_state:
     st.session_state.completed_submitted = False
+if 'show_quit_warning' not in st.session_state:
+    st.session_state.show_quit_warning = False
 
 def save_assessment_record(student_id, final_score, start_epoch):
     elapsed_seconds = int(time.time() - start_epoch)
     mins, secs = divmod(elapsed_seconds, 60)
     duration_str = f"{mins}m {secs}s"
+    
     if student_id != "ADMIN-TEST":
         db = SessionLocal()
         try:
@@ -141,7 +143,6 @@ def save_assessment_record(student_id, final_score, start_epoch):
             db.close()
 
 # ----------------- APP ROUTING CONTROLLER -----------------
-
 if st.session_state.authenticated and st.session_state.is_admin:
     st.sidebar.title("Admin Console")
     if st.sidebar.button("Sign Out"):
@@ -154,17 +155,16 @@ if st.session_state.authenticated and st.session_state.is_admin:
         st.session_state.user_id = "ADMIN-TEST"
         st.session_state.is_admin = False
         st.session_state.completed_submitted = False
-        
         shuffled = list(ASSESSMENT_DATA)
         random.shuffle(shuffled)
         st.session_state.shuffled_assessment = shuffled
         words_list = [item["a"] for item in shuffled]
-        
         g, p = generate_word_search_grid(words_list)
         st.session_state.grid = g
         st.session_state.placements = p
         st.session_state.found_words = set()
         st.session_state.start_time = time.time()
+        st.session_state.show_quit_warning = False
         st.rerun()
         
     st.markdown("### Student Grading Ledger")
@@ -173,9 +173,9 @@ if st.session_state.authenticated and st.session_state.is_admin:
     db.close()
     if records:
         table_data = [{
-            "Student Number": r.student_number, 
-            "Final Mark": f"{r.score} Marks", 
-            "Duration": r.duration, 
+            "Student Number": r.student_number,
+            "Final Mark": f"{r.score} Marks",
+            "Duration": r.duration,
             "Submission Timestamp": r.submission_time.strftime('%Y-%m-%d %H:%M:%S')
         } for r in records]
         st.table(table_data)
@@ -185,7 +185,7 @@ if st.session_state.authenticated and st.session_state.is_admin:
 elif st.session_state.authenticated and not st.session_state.is_admin:
     all_possible_words = [item["a"] for item in st.session_state.shuffled_assessment]
     current_score = len(st.session_state.found_words) * 2
-
+    
     # Check if 30-minute time limit has elapsed
     elapsed = int(time.time() - st.session_state.start_time)
     rem_time = max(0, (30 * 60) - elapsed)
@@ -198,137 +198,12 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
         st.session_state.authenticated = False
         st.session_state.completed_submitted = False
         st.rerun()
-
+        
     # Check if student completed all questions successfully
     if len(st.session_state.found_words) == len(all_possible_words) and not st.session_state.completed_submitted:
         st.session_state.completed_submitted = True
         save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
-
+        
     if st.session_state.completed_submitted:
         st.balloons()
         st.success("🎉 Outstanding! You have successfully completed all questions correctly.")
-        st.warning("⚠️ **All questions solved!** Your work is being automatically submitted. This session will close in **30 seconds**.")
-        time.sleep(30)
-        st.session_state.authenticated = False
-        st.session_state.completed_submitted = False
-        st.rerun()
-
-    mins, secs = divmod(rem_time, 60)
-    col1, col2, col3 = st.columns(3)
-    col1.subheader(f"Candidate: {st.session_state.user_id}")
-    col2.metric("Time Remaining", f"{mins:02d}:{secs:02d}")
-    col3.metric("Score", f"{current_score} Marks")
-    
-    st.markdown("---")
-    left_layout, right_layout = st.columns(2)
-    
-    with left_layout:
-        st.markdown("#### Word Search Puzzle Matrix")
-        st.caption("Correctly verified words automatically highlight in green below 👇")
-        
-        highlighted_coords = set()
-        for fw in st.session_state.found_words:
-            if fw in st.session_state.placements:
-                for coord in st.session_state.placements[fw]:
-                    highlighted_coords.add(coord)
-        
-        grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:0.85rem; text-align:center;'>"
-        for r in range(GRID_SIZE):
-            for c in range(GRID_SIZE):
-                letter = st.session_state.grid[r][c]
-                if (r, c) in highlighted_coords:
-                    grid_html += f"<div style='background-color:#2ecc71; color:white; padding:4px 0; border-radius:2px;'>{letter}</div>"
-                else:
-                    grid_html += f"<div style='background-color:#f8f9fa; color:#2c3e50; padding:4px 0; border:1px solid #dee2e6; border-radius:2px;'>{letter}</div>"
-        grid_html += "</div>"
-        st.markdown(grid_html, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        guess = st.text_input("Type discovered term sequences in UPPERCASE:", key="word_guess", value="").strip().upper()
-        if st.button("Verify Found Word", use_container_width=True):
-            if guess in all_possible_words and guess not in st.session_state.found_words:
-                st.session_state.found_words.add(guess)
-                st.success(f"Correct Sequence Authenticated: +2 Marks ({guess})")
-                time.sleep(0.5)
-                st.rerun()
-            elif guess in st.session_state.found_words:
-                st.warning("Sequence has already been verified previously.")
-            else:
-                st.error("Invalid sequence pattern entry matched.")
-                
-    with right_layout:
-        st.markdown("#### Assessment Questions (2 Marks Each)")
-        for idx, item in enumerate(st.session_state.shuffled_assessment, 1):
-            is_done = item["a"] in st.session_state.found_words
-            if is_done:
-                st.markdown(f"~~{idx}. {item['q']}~~ 🟢 **[SOLVED]**")
-            else:
-                st.markdown(f"*{idx}.* {item['q']}")
-        st.markdown("---")
-        if st.button("Finalize and Submit Examination Paper", type="primary", use_container_width=True):
-            save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
-            st.success(f"Submission recorded! Final Mark assigned: {current_score} Marks.")
-            time.sleep(2)
-            st.session_state.authenticated = False
-            st.rerun()
-
-else:
-    st.title("Portal Authentication Gate")
-    user_code = st.text_input("Enter Student Number / Admin Staff Number:", value="", autocomplete="off")
-    if st.button("Authenticate & Access", use_container_width=True):
-        user_code = user_code.strip()
-        if user_code == ADMIN_STAFF_NUMBER:
-            st.session_state.authenticated = True
-            st.session_state.user_id = user_code
-            st.session_state.is_admin = True
-            st.rerun()
-        elif user_code in AUTHORIZED_STUDENTS:
-            db = SessionLocal()
-            existing = db.query(AssessmentResult).filter(AssessmentResult.student_number == user_code).first()
-            db.close()
-            if existing:
-                st.error("Authentication failed. This student record has already logged a grading attempt.")
-            else:
-                st.session_state.authenticated = True
-                st.session_state.user_id = user_code
-                st.session_state.is_admin = False
-                st.session_state.completed_submitted = False
-                
-                shuffled = list(ASSESSMENT_DATA)
-                random.shuffle(shuffled)
-                st.session_state.shuffled_assessment = shuffled
-                words_list = [item["a"] for item in shuffled]
-                
-                g, p = generate_word_search_grid(words_list)
-                st.session_state.grid = g
-                st.session_state.placements = p
-                st.session_state.found_words = set()
-                st.session_state.start_time = time.time()
-                st.rerun()
-        else:
-            st.error("The code entered is not registered on the system.")
-
-    st.markdown("---")
-    with st.expander("🛠️ Admin Identity Override System"):
-        staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
-        alt_id = st.text_input("Create Alternate Student Identity String:", key="override_alt")
-        if st.button("Force Establish Session"):
-            if staff_code.strip() == ADMIN_STAFF_NUMBER and alt_id.strip():
-                st.session_state.authenticated = True
-                st.session_state.user_id = alt_id.strip()
-                st.session_state.is_admin = False
-                st.session_state.completed_submitted = False
-                
-                shuffled = list(ASSESSMENT_DATA)
-                random.shuffle(shuffled)
-                st.session_state.shuffled_assessment = shuffled
-                words_list = [item["a"] for item in shuffled]
-                
-                g, p = generate_word_search_grid(words_list)
-                st.session_state.grid = g
-                st.session_state.placements = p
-                st.session_state.found_words = set()
-                st.session_state.start_time = time.time()
-                st.rerun()
-            else:
-                st.error("Invalid credentials or fields missing.")
