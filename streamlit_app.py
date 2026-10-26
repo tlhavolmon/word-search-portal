@@ -60,18 +60,18 @@ ASSESSMENT_DATA = [
     {"q": "Used to preview the data in R and python.", "a": "HEAD"}
 ]
 
-WORDS_TO_FIND = [item["a"] for item in ASSESSMENT_DATA]
 GRID_SIZE = 18
 
-def generate_word_search_grid():
+def generate_word_search_grid(words_list):
+    """Generates a randomized word search grid and question ordering uniquely for each session."""
     grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
-    allowed_directions = [(0, 1), (1, 0), (1, 1)]
+    allowed_directions = [(0, 1), (1, 0), (1, 1), (0, -1), (-1, 0)]
     
     word_placements = {}
-    for word in WORDS_TO_FIND:
+    for word in words_list:
         placed = False
         attempts = 0
-        while not placed and attempts < 500:
+        while not placed and attempts < 600:
             d = random.choice(allowed_directions)
             r = random.randint(0, GRID_SIZE - 1)
             c = random.randint(0, GRID_SIZE - 1)
@@ -96,6 +96,7 @@ def generate_word_search_grid():
                     placed = True
             attempts += 1
             
+    # Fill remaining empty cells completely with random letters
     for r in range(GRID_SIZE):
         for c in range(GRID_SIZE):
             if grid[r][c] == ' ':
@@ -114,6 +115,8 @@ if 'grid' not in st.session_state:
     st.session_state.grid = None
 if 'placements' not in st.session_state:
     st.session_state.placements = {}
+if 'shuffled_assessment' not in st.session_state:
+    st.session_state.shuffled_assessment = []
 if 'found_words' not in st.session_state:
     st.session_state.found_words = set()
 if 'start_time' not in st.session_state:
@@ -143,6 +146,7 @@ if st.session_state.authenticated and not st.session_state.is_admin:
     elapsed = int(time.time() - st.session_state.start_time)
     rem_time = max(0, (30 * 60) - elapsed)
     if rem_time <= 0:
+        words_to_find_current = [item["a"] for item in st.session_state.shuffled_assessment]
         save_assessment_record(st.session_state.user_id, len(st.session_state.found_words)*2, st.session_state.start_time)
         st.session_state.authenticated = False
         st.error("Time Expired! Your assessment has been auto-submitted.")
@@ -181,9 +185,10 @@ if st.session_state.authenticated and not st.session_state.is_admin:
         st.markdown(grid_html, unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
+        all_possible_words = [item["a"] for item in st.session_state.shuffled_assessment]
         guess = st.text_input("Type discovered term sequences in UPPERCASE:", key="word_guess", value="").strip().upper()
         if st.button("Verify Found Word", use_container_width=True):
-            if guess in WORDS_TO_FIND and guess not in st.session_state.found_words:
+            if guess in all_possible_words and guess not in st.session_state.found_words:
                 st.session_state.found_words.add(guess)
                 st.success(f"Correct Sequence Authenticated: +2 Marks ({guess})")
                 time.sleep(0.5)
@@ -195,7 +200,7 @@ if st.session_state.authenticated and not st.session_state.is_admin:
                 
     with right_layout:
         st.markdown("#### Assessment Questions (2 Marks Each)")
-        for idx, item in enumerate(ASSESSMENT_DATA, 1):
+        for idx, item in enumerate(st.session_state.shuffled_assessment, 1):
             is_done = item["a"] in st.session_state.found_words
             if is_done:
                 st.markdown(f"~~{idx}. {item['q']}~~ 🟢 **[SOLVED]**")
@@ -220,8 +225,15 @@ elif st.session_state.authenticated and st.session_state.is_admin:
     st.title("Administrative Grade Console")
     if st.button("🚀 Run Application Test (Practice Mode)", use_container_width=True):
         st.session_state.user_id = "ADMIN-TEST"
-        st.session_state.is_admin = False  # Switch out of admin mode immediately
-        g, p = generate_word_search_grid()
+        st.session_state.is_admin = False
+        
+        # Randomize questions and grid for practice test
+        shuffled = list(ASSESSMENT_DATA)
+        random.shuffle(shuffled)
+        st.session_state.shuffled_assessment = shuffled
+        words_list = [item["a"] for item in shuffled]
+        
+        g, p = generate_word_search_grid(words_list)
         st.session_state.grid = g
         st.session_state.placements = p
         st.session_state.found_words = set()
@@ -264,7 +276,14 @@ else:
                 st.session_state.authenticated = True
                 st.session_state.user_id = user_code
                 st.session_state.is_admin = False
-                g, p = generate_word_search_grid()
+                
+                # Randomize questions and grid uniquely for this student login
+                shuffled = list(ASSESSMENT_DATA)
+                random.shuffle(shuffled)
+                st.session_state.shuffled_assessment = shuffled
+                words_list = [item["a"] for item in shuffled]
+                
+                g, p = generate_word_search_grid(words_list)
                 st.session_state.grid = g
                 st.session_state.placements = p
                 st.session_state.found_words = set()
@@ -282,7 +301,14 @@ else:
                 st.session_state.authenticated = True
                 st.session_state.user_id = alt_id.strip()
                 st.session_state.is_admin = False
-                g, p = generate_word_search_grid()
+                
+                # Randomize questions and grid for override session
+                shuffled = list(ASSESSMENT_DATA)
+                random.shuffle(shuffled)
+                st.session_state.shuffled_assessment = shuffled
+                words_list = [item["a"] for item in shuffled]
+                
+                g, p = generate_word_search_grid(words_list)
                 st.session_state.grid = g
                 st.session_state.placements = p
                 st.session_state.found_words = set()
