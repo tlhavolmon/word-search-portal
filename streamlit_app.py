@@ -63,9 +63,10 @@ ASSESSMENT_DATA = [
 GRID_SIZE = 18
 
 def generate_word_search_grid(words_list):
-    """Generates a randomized word search grid and question ordering uniquely for each session."""
+    """Generates a randomized word search grid where words ONLY read forward (Right, Down, Diagonal-Down-Right)."""
     grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
-    allowed_directions = [(0, 1), (1, 0), (1, 1), (0, -1), (-1, 0)]
+    # STRICTLY forward-reading directions only: Horizontal Right, Vertical Down, Diagonal Down-Right
+    allowed_directions = [(0, 1), (1, 0), (1, 1)]
     
     word_placements = {}
     for word in words_list:
@@ -146,7 +147,6 @@ if st.session_state.authenticated and not st.session_state.is_admin:
     elapsed = int(time.time() - st.session_state.start_time)
     rem_time = max(0, (30 * 60) - elapsed)
     if rem_time <= 0:
-        words_to_find_current = [item["a"] for item in st.session_state.shuffled_assessment]
         save_assessment_record(st.session_state.user_id, len(st.session_state.found_words)*2, st.session_state.start_time)
         st.session_state.authenticated = False
         st.error("Time Expired! Your assessment has been auto-submitted.")
@@ -227,7 +227,6 @@ elif st.session_state.authenticated and st.session_state.is_admin:
         st.session_state.user_id = "ADMIN-TEST"
         st.session_state.is_admin = False
         
-        # Randomize questions and grid for practice test
         shuffled = list(ASSESSMENT_DATA)
         random.shuffle(shuffled)
         st.session_state.shuffled_assessment = shuffled
@@ -260,59 +259,4 @@ else:
     st.title("Portal Authentication Gate")
     user_code = st.text_input("Enter Student Number / Admin Staff Number:", value="", autocomplete="off")
     if st.button("Authenticate & Access", use_container_width=True):
-        user_code = user_code.strip()
-        if user_code == ADMIN_STAFF_NUMBER:
-            st.session_state.authenticated = True
-            st.session_state.user_id = user_code
-            st.session_state.is_admin = True
-            st.rerun()
-        elif user_code in AUTHORIZED_STUDENTS:
-            db = SessionLocal()
-            existing = db.query(AssessmentResult).filter(AssessmentResult.student_number == user_code).first()
-            db.close()
-            if existing:
-                st.error("Authentication failed. This student record has already logged a grading attempt.")
-            else:
-                st.session_state.authenticated = True
-                st.session_state.user_id = user_code
-                st.session_state.is_admin = False
-                
-                # Randomize questions and grid uniquely for this student login
-                shuffled = list(ASSESSMENT_DATA)
-                random.shuffle(shuffled)
-                st.session_state.shuffled_assessment = shuffled
-                words_list = [item["a"] for item in shuffled]
-                
-                g, p = generate_word_search_grid(words_list)
-                st.session_state.grid = g
-                st.session_state.placements = p
-                st.session_state.found_words = set()
-                st.session_state.start_time = time.time()
-                st.rerun()
-        else:
-            st.error("The code entered is not registered on the system.")
-
-    st.markdown("---")
-    with st.expander("🛠️ Admin Identity Override System"):
-        staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
-        alt_id = st.text_input("Create Alternate Student Identity String:", key="override_alt")
-        if st.button("Force Establish Session"):
-            if staff_code.strip() == ADMIN_STAFF_NUMBER and alt_id.strip():
-                st.session_state.authenticated = True
-                st.session_state.user_id = alt_id.strip()
-                st.session_state.is_admin = False
-                
-                # Randomize questions and grid for override session
-                shuffled = list(ASSESSMENT_DATA)
-                random.shuffle(shuffled)
-                st.session_state.shuffled_assessment = shuffled
-                words_list = [item["a"] for item in shuffled]
-                
-                g, p = generate_word_search_grid(words_list)
-                st.session_state.grid = g
-                st.session_state.placements = p
-                st.session_state.found_words = set()
-                st.session_state.start_time = time.time()
-                st.rerun()
-            else:
-                st.error("Invalid credentials or fields missing.")
+        user_code = user_
