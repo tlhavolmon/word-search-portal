@@ -120,6 +120,8 @@ if 'found_words' not in st.session_state:
     st.session_state.found_words = set()
 if 'start_time' not in st.session_state:
     st.session_state.start_time = None
+if 'completed_submitted' not in st.session_state:
+    st.session_state.completed_submitted = False
 
 def save_assessment_record(student_id, final_score, start_epoch):
     elapsed_seconds = int(time.time() - start_epoch)
@@ -151,6 +153,7 @@ if st.session_state.authenticated and st.session_state.is_admin:
     if st.button("🚀 Run Application Test (Practice Mode)", use_container_width=True):
         st.session_state.user_id = "ADMIN-TEST"
         st.session_state.is_admin = False
+        st.session_state.completed_submitted = False
         
         shuffled = list(ASSESSMENT_DATA)
         random.shuffle(shuffled)
@@ -180,10 +183,27 @@ if st.session_state.authenticated and st.session_state.is_admin:
         st.info("No student records have been logged in the tracking database yet.")
 
 elif st.session_state.authenticated and not st.session_state.is_admin:
+    all_possible_words = [item["a"] for item in st.session_state.shuffled_assessment]
+    current_score = len(st.session_state.found_words) * 2
+
+    # Check if student completed all questions
+    if len(st.session_state.found_words) == len(all_possible_words) and not st.session_state.completed_submitted:
+        st.session_state.completed_submitted = True
+        save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
+
+    if st.session_state.completed_submitted:
+        st.balloons()
+        st.success("🎉 Outstanding! You have successfully answered and verified all questions correctly.")
+        st.warning("⚠️ **All questions completed!** Your work is about to be automatically submitted. This session will close in **60 seconds**.")
+        time.sleep(60)
+        st.session_state.authenticated = False
+        st.session_state.completed_submitted = False
+        st.rerun()
+
     elapsed = int(time.time() - st.session_state.start_time)
     rem_time = max(0, (30 * 60) - elapsed)
     if rem_time <= 0:
-        save_assessment_record(st.session_state.user_id, len(st.session_state.found_words)*2, st.session_state.start_time)
+        save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
         st.session_state.authenticated = False
         st.error("Time Expired! Your assessment has been auto-submitted.")
         time.sleep(2)
@@ -193,7 +213,6 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
     col1, col2, col3 = st.columns(3)
     col1.subheader(f"Candidate: {st.session_state.user_id}")
     col2.metric("Time Remaining", f"{mins:02d}:{secs:02d}")
-    current_score = len(st.session_state.found_words) * 2
     col3.metric("Score", f"{current_score} Marks")
     
     st.markdown("---")
@@ -221,7 +240,6 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
         st.markdown(grid_html, unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
-        all_possible_words = [item["a"] for item in st.session_state.shuffled_assessment]
         guess = st.text_input("Type discovered term sequences in UPPERCASE:", key="word_guess", value="").strip().upper()
         if st.button("Verify Found Word", use_container_width=True):
             if guess in all_possible_words and guess not in st.session_state.found_words:
@@ -270,6 +288,7 @@ else:
                 st.session_state.authenticated = True
                 st.session_state.user_id = user_code
                 st.session_state.is_admin = False
+                st.session_state.completed_submitted = False
                 
                 shuffled = list(ASSESSMENT_DATA)
                 random.shuffle(shuffled)
@@ -294,6 +313,7 @@ else:
                 st.session_state.authenticated = True
                 st.session_state.user_id = alt_id.strip()
                 st.session_state.is_admin = False
+                st.session_state.completed_submitted = False
                 
                 shuffled = list(ASSESSMENT_DATA)
                 random.shuffle(shuffled)
