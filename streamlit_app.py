@@ -63,39 +63,49 @@ ASSESSMENT_DATA = [
 WORDS_TO_FIND = [item["a"] for item in ASSESSMENT_DATA]
 GRID_SIZE = 18
 
-def setup_assessment_matrix():
-    grid = [
-        ["S","T","R","I","N","G","X","X","C","O","M","M","E","N","T","I","N","G"],
-        ["X","D","O","L","L","A","R","S","I","G","N","X","X","X","X","X","X","X"],
-        ["X","X","D","A","T","A","L","I","N","E","S","X","X","X","X","X","X","X"],
-        ["X","X","X","I","M","P","O","R","T","I","N","G","X","X","X","X","X","X"],
-        ["X","X","X","X","L","O","G","W","I","N","D","O","W","X","X","X","X","X"],
-        ["X","X","X","X","X","C","H","I","S","Q","A","U","R","E","X","X","X","X"],
-        ["X","X","X","X","X","X","T","A","B","L","E","S","X","X","X","X","X","X"],
-        ["X","X","X","X","X","X","X","P","Y","T","H","O","N","X","X","X","X","X"],
-        ["X","X","X","X","X","X","X","X","O","U","T","X","X","X","X","X","X","X"],
-        ["X","P","R","O","C","U","N","I","V","A","R","I","A","T","E","X","X","X"],
-        ["X","X","M","E","A","N","S","X","X","X","X","X","X","X","X","X","X","X"],
-        ["X","S","C","A","T","T","E","R","P","L","O","T","X","X","X","X","X","X"],
-        ["X","X","P","V","A","L","U","E","X","X","X","X","X","X","X","X","X","X"],
-        ["X","S","U","M","M","A","R","Y","X","X","X","X","X","X","X","X","X","X"],
-        ["X","X","F","U","N","C","T","I","O","N","S","X","X","X","X","X","X","X"],
-        ["X","X","X","S","O","R","T","X","X","X","X","X","X","X","X","X","X","X"],
-        ["X","C","O","R","R","E","L","A","T","I","O","N","X","X","X","X","X","X"],
-        ["Q","Q","L","I","N","E","X","A","N","O","V","A","X","X","H","E","A","D"]
-    ]
+def generate_word_search_grid():
+    grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+    # Allowed directions: horizontal right, vertical down, diagonal down-right
+    allowed_directions = [(0, 1), (1, 0), (1, 1)]
+    
     word_placements = {}
     for word in WORDS_TO_FIND:
-        coords = []
-        for r_idx, row in enumerate(grid):
-            row_str = "".join(row)
-            start_c = row_str.find(word)
-            if start_c != -1:
-                coords = [(r_idx, start_c + i) for i in range(len(word))]
-                word_placements[word] = coords
-                break
+        placed = False
+        attempts = 0
+        while not placed and attempts < 500:
+            d = random.choice(allowed_directions)
+            r = random.randint(0, GRID_SIZE - 1)
+            c = random.randint(0, GRID_SIZE - 1)
+            end_r = r + d[0] * (len(word) - 1)
+            end_c = c + d[1] * (len(word) - 1)
+            
+            if 0 <= end_r < GRID_SIZE and 0 <= end_c < GRID_SIZE:
+                can_place = True
+                for i in range(len(word)):
+                    nr, nc = r + d[0] * i, c + d[1] * i
+                    if grid[nr][nc] != ' ' and grid[nr][nc] != word[i]:
+                        can_place = False
+                        break
+                if can_place:
+                    coords = []
+                    for i in range(len(word)):
+                        curr_r = r + d[0] * i
+                        curr_c = c + d[1] * i
+                        grid[curr_r][curr_c] = word[i]
+                        coords.append((curr_r, curr_c))
+                    word_placements[word] = coords
+                    placed = True
+            attempts += 1
+            
+    # Fill remaining empty cells completely with random letters (no more 'X's)
+    for r in range(GRID_SIZE):
+        for c in range(GRID_SIZE):
+            if grid[r][c] == ' ':
+                grid[r][c] = random.choice(string.ascii_uppercase)
+                
     return grid, word_placements
 
+# Initialize App Session Memory
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user_id' not in st.session_state:
@@ -128,7 +138,7 @@ def save_assessment_record(student_id, final_score, start_epoch):
         finally:
             db.close()
 
-# ----------------- APP ROUTING CONTROLLER -----------------
+# ----------------- APP RENDERING ROUTING -----------------
 
 if st.session_state.authenticated and st.session_state.is_admin:
     st.sidebar.title("Admin Console")
@@ -138,10 +148,10 @@ if st.session_state.authenticated and st.session_state.is_admin:
         st.rerun()
         
     st.title("Administrative Grade Console")
-    if st.button("🚀 Run Application Test (Practice Mode)"):
+    if st.button("🚀 Run Application Test (Practice Mode)", use_container_width=True):
         st.session_state.user_id = "ADMIN-TEST"
         st.session_state.is_admin = False
-        g, p = setup_assessment_matrix()
+        g, p = generate_word_search_grid()
         st.session_state.grid = g
         st.session_state.placements = p
         st.session_state.found_words = set()
@@ -187,20 +197,17 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
         st.markdown("#### Word Search Puzzle Matrix")
         st.caption("Correctly verified words automatically highlight in green below 👇")
         
-        # Build set of all cell coordinates that belong to found words
         highlighted_coords = set()
         for fw in st.session_state.found_words:
             if fw in st.session_state.placements:
                 for coord in st.session_state.placements[fw]:
                     highlighted_coords.add(coord)
         
-        # Render grid with dynamic color styling based on discovered status
         grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:0.85rem; text-align:center;'>"
         for r in range(GRID_SIZE):
             for c in range(GRID_SIZE):
                 letter = st.session_state.grid[r][c]
                 if (r, c) in highlighted_coords:
-                    # Highlight green for discovered words
                     grid_html += f"<div style='background-color:#2ecc71; color:white; padding:4px 0; border-radius:2px;'>{letter}</div>"
                 else:
                     grid_html += f"<div style='background-color:#f8f9fa; color:#2c3e50; padding:4px 0; border:1px solid #dee2e6; border-radius:2px;'>{letter}</div>"
@@ -256,7 +263,7 @@ else:
                 st.session_state.authenticated = True
                 st.session_state.user_id = user_code
                 st.session_state.is_admin = False
-                g, p = setup_assessment_matrix()
+                g, p = generate_word_search_grid()
                 st.session_state.grid = g
                 st.session_state.placements = p
                 st.session_state.found_words = set()
@@ -274,7 +281,7 @@ else:
                 st.session_state.authenticated = True
                 st.session_state.user_id = alt_id.strip()
                 st.session_state.is_admin = False
-                g, p = setup_assessment_matrix()
+                g, p = generate_word_search_grid()
                 st.session_state.grid = g
                 st.session_state.placements = p
                 st.session_state.found_words = set()
