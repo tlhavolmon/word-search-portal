@@ -43,7 +43,7 @@ ASSESSMENT_DATA = [
     {"q": "Can be used interchangeably with cards.", "a": "DATALINES"},
     {"q": "There is no need to define the data set name and capture it directly into SAS after doing this with any data from SPSS, SAS, R or Stata.", "a": "IMPORTING"},
     {"q": "Prints out every step that is executed in SAS.", "a": "LOGWINDOW"},
-    {"q": "An output used to test association between variables.", "a": "CHISQAURE"},
+    {"q": "An output used to test association between variables.", "a": "CHISQUARE"},
     {"q": "Lists variables that are used for an analysis in SAS when computing the frequencies.", "a": "TABLES"},
     {"q": "A # is used when making comments using this programming language.", "a": "PYTHON"},
     {"q": "An option used to print the sorted dataset to a SAS output file.", "a": "OUT"},
@@ -65,7 +65,7 @@ GRID_SIZE = 18
 
 def generate_word_search_grid():
     grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
-    allowed_directions = [(-1, 1), (0, 1), (1, 0), (1, 1)]
+    allowed_directions = [(0, 1), (1, 0), (1, 1)]
     
     word_placements = {}
     for word in WORDS_TO_FIND:
@@ -138,40 +138,8 @@ def save_assessment_record(student_id, final_score, start_epoch):
 
 # ----------------- APP ROUTING CONTROLLER -----------------
 
-if st.session_state.authenticated and st.session_state.is_admin:
-    st.sidebar.title("Admin Console")
-    if st.sidebar.button("Sign Out"):
-        st.session_state.authenticated = False
-        st.session_state.is_admin = False
-        st.rerun()
-        
-    st.title("Administrative Grade Console")
-    if st.button("🚀 Run Application Test (Practice Mode)", use_container_width=True):
-        st.session_state.user_id = "ADMIN-TEST"
-        st.session_state.is_admin = False
-        g, p = generate_word_search_grid()
-        st.session_state.grid = g
-        st.session_state.placements = p
-        st.session_state.found_words = set()
-        st.session_state.start_time = time.time()
-        st.rerun()
-        
-    st.markdown("### Student Grading Ledger")
-    db = SessionLocal()
-    records = db.query(AssessmentResult).all()
-    db.close()
-    if records:
-        table_data = [{
-            "Student Number": r.student_number, 
-            "Final Mark": f"{r.score} Marks", 
-            "Duration": r.duration, 
-            "Submission Timestamp": r.submission_time.strftime('%Y-%m-%d %H:%M:%S')
-        } for r in records]
-        st.table(table_data)
-    else:
-        st.info("No student records have been logged in the tracking database yet.")
-
-elif st.session_state.authenticated and not st.session_state.is_admin:
+# 1. Active Assessment Session View
+if st.session_state.authenticated and not st.session_state.is_admin:
     elapsed = int(time.time() - st.session_state.start_time)
     rem_time = max(0, (30 * 60) - elapsed)
     if rem_time <= 0:
@@ -193,35 +161,47 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
     
     with left_layout:
         st.markdown("#### Word Search Puzzle Matrix")
-        st.caption("Click and drag your mouse across letters in the grid to select and find words! 👇")
+        st.caption("Find words hidden in the grid and verify them below 👇")
         
-        # Handle word submission sent back from JavaScript drag-selection event
-        selected_guess = st.query_params.get("guess", None)
-        if selected_guess:
-            guess_word = selected_guess.strip().upper()
-            if guess_word in WORDS_TO_FIND and guess_word not in st.session_state.found_words:
-                st.session_state.found_words.add(guess_word)
-                st.success(f"Correct Sequence Authenticated: +2 Marks ({guess_word})")
-            # Clear parameter to prevent duplicate triggers
-            st.query_params.clear()
-
-        # Build list of cells already solved/found
-        found_coords = []
+        highlighted_coords = set()
         for fw in st.session_state.found_words:
             if fw in st.session_state.placements:
                 for coord in st.session_state.placements[fw]:
-                    found_coords.append(coord)
-
-        # Render Interactive Drag-and-Select HTML Grid
-        grid_data_json = st.session_state.grid
-        targets_json = WORDS_TO_FIND
-        placements_json = st.session_state.placements
-
-        custom_html = f"""
-        <style>
-            .grid-wrapper {{
-                display: grid;
-                grid-template-columns: repeat(18, 1fr);
-                gap: 2px;
-                background-color: #bdc3c7;
-                padding: 4px;
+                    highlighted_coords.add(coord)
+        
+        grid_html = "<div style='display: grid; grid-template-columns: repeat(18, 1fr); gap: 2px; font-family: monospace; font-weight: bold; font-size:0.85rem; text-align:center;'>"
+        for r in range(GRID_SIZE):
+            for c in range(GRID_SIZE):
+                letter = st.session_state.grid[r][c]
+                if (r, c) in highlighted_coords:
+                    grid_html += f"<div style='background-color:#2ecc71; color:white; padding:4px 0; border-radius:2px;'>{letter}</div>"
+                else:
+                    grid_html += f"<div style='background-color:#f8f9fa; color:#2c3e50; padding:4px 0; border:1px solid #dee2e6; border-radius:2px;'>{letter}</div>"
+        grid_html += "</div>"
+        st.markdown(grid_html, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        guess = st.text_input("Type discovered term sequences in UPPERCASE:", key="word_guess", value="").strip().upper()
+        if st.button("Verify Found Word", use_container_width=True):
+            if guess in WORDS_TO_FIND and guess not in st.session_state.found_words:
+                st.session_state.found_words.add(guess)
+                st.success(f"Correct Sequence Authenticated: +2 Marks ({guess})")
+                time.sleep(0.5)
+                st.rerun()
+            elif guess in st.session_state.found_words:
+                st.warning("Sequence has already been verified previously.")
+            else:
+                st.error("Invalid sequence pattern entry matched.")
+                
+    with right_layout:
+        st.markdown("#### Assessment Questions (2 Marks Each)")
+        for idx, item in enumerate(ASSESSMENT_DATA, 1):
+            is_done = item["a"] in st.session_state.found_words
+            if is_done:
+                st.markdown(f"~~{idx}. {item['q']}~~ 🟢 **[SOLVED]**")
+            else:
+                st.markdown(f"*{idx}.* {item['q']}")
+        st.markdown("---")
+        if st.button("Finalize and Submit Examination Paper", type="primary", use_container_width=True):
+            save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
+            st.success(f"Submission recorded! Final
