@@ -52,7 +52,7 @@ ASSESSMENT_DATA = [
     {"q": "A graphical test for bivariate relationship testing.", "a": "SCATTERPLOT"},
     {"q": "We interpret this when we want to determine significance of any test regardless of the software used to generate the output.", "a": "PVALUE"},
     {"q": "Used to output basic descriptive statistics for a continuous variable and for outputting regression model outputs in the R software.", "a": "SUMMARY"},
-    {"q": "The < - is used when creating this in the R software.", "a": "FUNCTIONS"},
+    {"q": "The <- is used when creating this in the R software.", "a": "FUNCTIONS"},
     {"q": "A procedure that does not produce an output in SAS unless the print procedure is used after it.", "a": "SORT"},
     {"q": "A coefficient used to test the strength and direction of a significant relationship.", "a": "CORRELATION"},
     {"q": "Used to display 45 degree line on a QQ plot in R.", "a": "QQLINE"},
@@ -65,7 +65,6 @@ GRID_SIZE = 18
 
 def generate_word_search_grid():
     grid = [[' ' for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
-    # Allowed directions: horizontal right, vertical down, diagonal down-right
     allowed_directions = [(0, 1), (1, 0), (1, 1)]
     
     word_placements = {}
@@ -97,7 +96,6 @@ def generate_word_search_grid():
                     placed = True
             attempts += 1
             
-    # Fill remaining empty cells completely with random letters (no more 'X's)
     for r in range(GRID_SIZE):
         for c in range(GRID_SIZE):
             if grid[r][c] == ' ':
@@ -138,42 +136,10 @@ def save_assessment_record(student_id, final_score, start_epoch):
         finally:
             db.close()
 
-# ----------------- APP RENDERING ROUTING -----------------
+# ----------------- APP ROUTING CONTROLLER -----------------
 
-if st.session_state.authenticated and st.session_state.is_admin:
-    st.sidebar.title("Admin Console")
-    if st.sidebar.button("Sign Out"):
-        st.session_state.authenticated = False
-        st.session_state.is_admin = False
-        st.rerun()
-        
-    st.title("Administrative Grade Console")
-    if st.button("🚀 Run Application Test (Practice Mode)", use_container_width=True):
-        st.session_state.user_id = "ADMIN-TEST"
-        st.session_state.is_admin = False
-        g, p = generate_word_search_grid()
-        st.session_state.grid = g
-        st.session_state.placements = p
-        st.session_state.found_words = set()
-        st.session_state.start_time = time.time()
-        st.rerun()
-        
-    st.markdown("### Student Grading Ledger")
-    db = SessionLocal()
-    records = db.query(AssessmentResult).all()
-    db.close()
-    if records:
-        table_data = [{
-            "Student Number": r.student_number, 
-            "Final Mark": f"{r.score} Marks", 
-            "Duration": r.duration, 
-            "Submission Timestamp": r.submission_time.strftime('%Y-%m-%d %H:%M:%S')
-        } for r in records]
-        st.table(table_data)
-    else:
-        st.info("No student records have been logged in the tracking database yet.")
-
-elif st.session_state.authenticated and not st.session_state.is_admin:
+# 1. Active Assessment Session View
+if st.session_state.authenticated and not st.session_state.is_admin:
     elapsed = int(time.time() - st.session_state.start_time)
     rem_time = max(0, (30 * 60) - elapsed)
     if rem_time <= 0:
@@ -243,6 +209,41 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
             st.session_state.authenticated = False
             st.rerun()
 
+# 2. Admin Console View
+elif st.session_state.authenticated and st.session_state.is_admin:
+    st.sidebar.title("Admin Console")
+    if st.sidebar.button("Sign Out"):
+        st.session_state.authenticated = False
+        st.session_state.is_admin = False
+        st.rerun()
+        
+    st.title("Administrative Grade Console")
+    if st.button("🚀 Run Application Test (Practice Mode)", use_container_width=True):
+        st.session_state.user_id = "ADMIN-TEST"
+        st.session_state.is_admin = False  # Switch out of admin mode immediately
+        g, p = generate_word_search_grid()
+        st.session_state.grid = g
+        st.session_state.placements = p
+        st.session_state.found_words = set()
+        st.session_state.start_time = time.time()
+        st.rerun()
+        
+    st.markdown("### Student Grading Ledger")
+    db = SessionLocal()
+    records = db.query(AssessmentResult).all()
+    db.close()
+    if records:
+        table_data = [{
+            "Student Number": r.student_number, 
+            "Final Mark": f"{r.score} Marks", 
+            "Duration": r.duration, 
+            "Submission Timestamp": r.submission_time.strftime('%Y-%m-%d %H:%M:%S')
+        } for r in records]
+        st.table(table_data)
+    else:
+        st.info("No student records have been logged in the tracking database yet.")
+
+# 3. Login Gate View
 else:
     st.title("Portal Authentication Gate")
     user_code = st.text_input("Enter Student Number / Admin Staff Number:", value="", autocomplete="off")
