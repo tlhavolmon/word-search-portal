@@ -186,29 +186,33 @@ elif st.session_state.authenticated and not st.session_state.is_admin:
     all_possible_words = [item["a"] for item in st.session_state.shuffled_assessment]
     current_score = len(st.session_state.found_words) * 2
 
-    # Check if student completed all questions
+    # Check if 30-minute time limit has elapsed
+    elapsed = int(time.time() - st.session_state.start_time)
+    rem_time = max(0, (30 * 60) - elapsed)
+    
+    if rem_time <= 0 and not st.session_state.completed_submitted:
+        st.session_state.completed_submitted = True
+        save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
+        st.error("⏰ Time Expired! Your assessment has been automatically submitted.")
+        time.sleep(3)
+        st.session_state.authenticated = False
+        st.session_state.completed_submitted = False
+        st.rerun()
+
+    # Check if student completed all questions successfully
     if len(st.session_state.found_words) == len(all_possible_words) and not st.session_state.completed_submitted:
         st.session_state.completed_submitted = True
         save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
 
     if st.session_state.completed_submitted:
         st.balloons()
-        st.success("🎉 Outstanding! You have successfully answered and verified all questions correctly.")
-        st.warning("⚠️ **All questions completed!** Your work is about to be automatically submitted. This session will close in **60 seconds**.")
-        time.sleep(60)
+        st.success("🎉 Outstanding! You have successfully completed all questions correctly.")
+        st.warning("⚠️ **All questions solved!** Your work is being automatically submitted. This session will close in **30 seconds**.")
+        time.sleep(30)
         st.session_state.authenticated = False
         st.session_state.completed_submitted = False
         st.rerun()
 
-    elapsed = int(time.time() - st.session_state.start_time)
-    rem_time = max(0, (30 * 60) - elapsed)
-    if rem_time <= 0:
-        save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
-        st.session_state.authenticated = False
-        st.error("Time Expired! Your assessment has been auto-submitted.")
-        time.sleep(2)
-        st.rerun()
-        
     mins, secs = divmod(rem_time, 60)
     col1, col2, col3 = st.columns(3)
     col1.subheader(f"Candidate: {st.session_state.user_id}")
