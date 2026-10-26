@@ -71,7 +71,7 @@ def generate_word_search_grid():
     for word in WORDS_TO_FIND:
         placed = False
         attempts = 0
-        while not placed and attempts < 400:
+        while not placed and attempts < 500:
             d = random.choice(allowed_directions)
             r = random.randint(0, GRID_SIZE - 1)
             c = random.randint(0, GRID_SIZE - 1)
@@ -161,7 +161,7 @@ if st.session_state.authenticated and not st.session_state.is_admin:
     
     with left_layout:
         st.markdown("#### Word Search Puzzle Matrix")
-        st.caption("Find words hidden in the grid and verify them below 👇")
+        st.caption("Correctly verified words automatically highlight in green below 👇")
         
         highlighted_coords = set()
         for fw in st.session_state.found_words:
@@ -204,4 +204,89 @@ if st.session_state.authenticated and not st.session_state.is_admin:
         st.markdown("---")
         if st.button("Finalize and Submit Examination Paper", type="primary", use_container_width=True):
             save_assessment_record(st.session_state.user_id, current_score, st.session_state.start_time)
-            st.success(f"Submission recorded! Final
+            st.success(f"Submission recorded! Final Mark assigned: {current_score} Marks.")
+            time.sleep(2)
+            st.session_state.authenticated = False
+            st.rerun()
+
+# 2. Admin Console View
+elif st.session_state.authenticated and st.session_state.is_admin:
+    st.sidebar.title("Admin Console")
+    if st.sidebar.button("Sign Out"):
+        st.session_state.authenticated = False
+        st.session_state.is_admin = False
+        st.rerun()
+        
+    st.title("Administrative Grade Console")
+    if st.button("🚀 Run Application Test (Practice Mode)", use_container_width=True):
+        st.session_state.user_id = "ADMIN-TEST"
+        st.session_state.is_admin = False  # Switch out of admin mode immediately
+        g, p = generate_word_search_grid()
+        st.session_state.grid = g
+        st.session_state.placements = p
+        st.session_state.found_words = set()
+        st.session_state.start_time = time.time()
+        st.rerun()
+        
+    st.markdown("### Student Grading Ledger")
+    db = SessionLocal()
+    records = db.query(AssessmentResult).all()
+    db.close()
+    if records:
+        table_data = [{
+            "Student Number": r.student_number, 
+            "Final Mark": f"{r.score} Marks", 
+            "Duration": r.duration, 
+            "Submission Timestamp": r.submission_time.strftime('%Y-%m-%d %H:%M:%S')
+        } for r in records]
+        st.table(table_data)
+    else:
+        st.info("No student records have been logged in the tracking database yet.")
+
+# 3. Login Gate View
+else:
+    st.title("Portal Authentication Gate")
+    user_code = st.text_input("Enter Student Number / Admin Staff Number:", value="", autocomplete="off")
+    if st.button("Authenticate & Access", use_container_width=True):
+        user_code = user_code.strip()
+        if user_code == ADMIN_STAFF_NUMBER:
+            st.session_state.authenticated = True
+            st.session_state.user_id = user_code
+            st.session_state.is_admin = True
+            st.rerun()
+        elif user_code in AUTHORIZED_STUDENTS:
+            db = SessionLocal()
+            existing = db.query(AssessmentResult).filter(AssessmentResult.student_number == user_code).first()
+            db.close()
+            if existing:
+                st.error("Authentication failed. This student record has already logged a grading attempt.")
+            else:
+                st.session_state.authenticated = True
+                st.session_state.user_id = user_code
+                st.session_state.is_admin = False
+                g, p = generate_word_search_grid()
+                st.session_state.grid = g
+                st.session_state.placements = p
+                st.session_state.found_words = set()
+                st.session_state.start_time = time.time()
+                st.rerun()
+        else:
+            st.error("The code entered is not registered on the system.")
+
+    st.markdown("---")
+    with st.expander("🛠️ Admin Identity Override System"):
+        staff_code = st.text_input("Enter Staff Code:", type="password", key="override_staff")
+        alt_id = st.text_input("Create Alternate Student Identity String:", key="override_alt")
+        if st.button("Force Establish Session"):
+            if staff_code.strip() == ADMIN_STAFF_NUMBER and alt_id.strip():
+                st.session_state.authenticated = True
+                st.session_state.user_id = alt_id.strip()
+                st.session_state.is_admin = False
+                g, p = generate_word_search_grid()
+                st.session_state.grid = g
+                st.session_state.placements = p
+                st.session_state.found_words = set()
+                st.session_state.start_time = time.time()
+                st.rerun()
+            else:
+                st.error("Invalid credentials or fields missing.")
